@@ -1,8 +1,15 @@
 import type { Conflict } from '@/types';
 import { getConflictTypeLabel } from './conflict';
 
-export function exportConflictsToCSV(conflicts: Conflict[]): string {
-  const headers = ['序号', '冲突类型', '描述', '相关ID', '是否已确认', '确认时间'];
+interface BatchInfo {
+  batchId: string;
+  batchName: string | null;
+  isPreview: boolean;
+  batchCreatedAt: string | null;
+}
+
+export function exportConflictsToCSV(conflicts: Conflict[], batchInfo?: BatchInfo | null): string {
+  const headers = ['序号', '冲突类型', '描述', '相关ID', '是否已确认', '确认时间', '导入批次ID', '批次名称', '是否预览标记', '批次生成时间'];
   const rows = conflicts.map((c, index) => [
     index + 1,
     getConflictTypeLabel(c.type),
@@ -10,6 +17,10 @@ export function exportConflictsToCSV(conflicts: Conflict[]): string {
     c.relatedIds.join('; '),
     c.confirmed ? '是' : '否',
     c.confirmedAt || '-',
+    batchInfo?.batchId || '-',
+    batchInfo?.batchName || '-',
+    batchInfo ? (batchInfo.isPreview ? '是（导入前预览）' : '否（已应用）') : '-',
+    batchInfo?.batchCreatedAt ? new Date(batchInfo.batchCreatedAt).toLocaleString('zh-CN', { hour12: false }) : '-',
   ]);
 
   const csvContent = [headers, ...rows]

@@ -1,4 +1,4 @@
-import type { PersistedState, CameraState, Filters } from '@/types';
+import type { PersistedState, CameraState, Filters, ImportPreviewDraft, UndoSnapshot } from '@/types';
 
 const STORAGE_KEY = 'warehouse_inspection_state';
 
@@ -27,6 +27,9 @@ export function loadPersistedState(): PersistedState {
       exportCount: parsed.exportCount ?? 0,
       cameraState: parsed.cameraState,
       selectedSlotId: parsed.selectedSlotId ?? null,
+      previewDraft: parsed.previewDraft ?? null,
+      undoSnapshot: parsed.undoSnapshot ?? null,
+      currentBatchId: parsed.currentBatchId ?? null,
     };
   } catch {
     return { ...defaultState };
@@ -85,4 +88,22 @@ export function saveSelectedSlotId(slotId: string | null): void {
 
 export function clearPersistedState(): void {
   localStorage.removeItem(STORAGE_KEY);
+}
+
+export function savePreviewDraft(draft: ImportPreviewDraft | null): void {
+  const state = loadPersistedState();
+  state.previewDraft = draft;
+  savePersistedState(state);
+}
+
+export function saveUndoSnapshot(snapshot: UndoSnapshot | null): void {
+  const state = loadPersistedState();
+  state.undoSnapshot = snapshot;
+  savePersistedState(state);
+}
+
+export function saveCurrentBatchId(batchId: string | null): void {
+  const state = loadPersistedState();
+  state.currentBatchId = batchId;
+  savePersistedState(state);
 }

@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { Upload, RotateCcw, Filter, Layers, ChevronLeft, ChevronRight, Download, RefreshCw } from 'lucide-react';
+import { Upload, RotateCcw, Filter, Layers, ChevronLeft, ChevronRight, Download, RefreshCw, Undo2 } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import type { SlotStatus } from '@/types';
 
@@ -16,6 +16,9 @@ export default function TopToolbar() {
     toggleLeftPanel,
     toggleRightPanel,
     getExportCount,
+    undoSnapshot,
+    undoLastImport,
+    previewDraft,
   } = useStore();
 
   const exportCount = getExportCount();
@@ -97,20 +100,37 @@ export default function TopToolbar() {
 
         <div className="h-6 w-px bg-slate-700" />
 
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-500 text-white rounded-md transition-colors"
-        >
-          <Upload size={16} />
-          导入布局
-        </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".json"
-          onChange={handleFileChange}
-          className="hidden"
-        />
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md transition-colors ${
+              previewDraft
+                ? 'bg-amber-600 hover:bg-amber-500 text-white ring-2 ring-amber-400/50'
+                : 'bg-blue-600 hover:bg-blue-500 text-white'
+            }`}
+          >
+            <Upload size={16} />
+            {previewDraft ? '继续预览...' : '导入布局'}
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json"
+            onChange={handleFileChange}
+            className="hidden"
+          />
+        </div>
+
+        {undoSnapshot && (
+          <button
+            onClick={undoLastImport}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-amber-700/80 hover:bg-amber-600 text-white rounded-md transition-colors animate-pulse ring-1 ring-amber-500/40"
+            title={`撤销导入，恢复到导入前的 ${undoSnapshot.layout.name}`}
+          >
+            <Undo2 size={16} />
+            撤销导入
+          </button>
+        )}
 
         <button
           onClick={loadSampleData}

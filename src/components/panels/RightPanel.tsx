@@ -4,9 +4,10 @@ import { getConflictTypeLabel, getConflictTypeColor } from '@/utils/conflict';
 import { exportConflictsToCSV, downloadCSV, formatTimestamp } from '@/utils/export';
 import type { ConflictType } from '@/types';
 import { useState } from 'react';
+import { ImportPreviewPanel } from './ImportPreviewPanel';
 
 export default function RightPanel() {
-  const { conflicts, confirmConflict, rightPanelOpen, setSelectedSlotId, getCurrentPallets, incrementExport } = useStore();
+  const { conflicts, confirmConflict, rightPanelOpen, setSelectedSlotId, getCurrentPallets, incrementExport, currentBatchId, previewDraft } = useStore();
   const [filterType, setFilterType] = useState<ConflictType | 'all'>('all');
   const currentPallets = getCurrentPallets();
 
@@ -14,8 +15,14 @@ export default function RightPanel() {
   const unconfirmedCount = conflicts.filter((c) => !c.confirmed).length;
 
   const handleExport = () => {
-    const csv = exportConflictsToCSV(conflicts);
-    const filename = `异常清单_${new Date().toISOString().slice(0, 10)}.csv`;
+    const batchInfo = previewDraft
+      ? { batchId: previewDraft.batchId, batchName: previewDraft.summary.name, isPreview: true, batchCreatedAt: previewDraft.createdAt }
+      : currentBatchId
+        ? { batchId: currentBatchId, batchName: null, isPreview: false, batchCreatedAt: null }
+        : null;
+    const csv = exportConflictsToCSV(conflicts, batchInfo);
+    const batchTag = previewDraft ? `预览_${previewDraft.batchId.slice(-6)}` : currentBatchId ? currentBatchId.slice(-6) : '手动';
+    const filename = `异常清单_${batchTag}_${new Date().toISOString().slice(0, 10)}.csv`;
     downloadCSV(filename, csv);
     incrementExport();
   };
@@ -82,6 +89,9 @@ export default function RightPanel() {
         </div>
 
         <div className="flex-1 overflow-y-auto">
+          <div className="px-3 pt-3">
+            <ImportPreviewPanel />
+          </div>
           {filteredConflicts.length > 0 ? (
             <div className="p-3 space-y-2">
               {filteredConflicts.map((conflict) => (

@@ -73,6 +73,44 @@ export interface Filters {
   shelfFilter: string | 'all';
 }
 
+export interface ImportDiffSummary {
+  addedSlotIds: string[];
+  removedSlotIds: string[];
+  overwrittenSlotIds: string[];
+  addedPalletIds: string[];
+  removedPalletIds: string[];
+}
+
+export interface ImportPreviewDraft {
+  batchId: string;
+  layout: WarehouseLayout;
+  validationErrors: string[];
+  isParseError: boolean;
+  summary: {
+    name: string;
+    shelfCount: number;
+    slotCount: number;
+    palletCount: number;
+    recordCount: number;
+    diff: ImportDiffSummary;
+    projectedConflicts: Conflict[];
+  };
+  createdAt: string;
+}
+
+export interface UndoSnapshot {
+  batchId: string;
+  importedLayoutName: string;
+  layout: WarehouseLayout;
+  conflicts: Conflict[];
+  confirmedConflicts: string[];
+  cameraState?: CameraState;
+  filters: Filters;
+  playbackIndex: number;
+  selectedSlotId: string | null;
+  createdAt: string;
+}
+
 export interface PersistedState {
   filters: Filters;
   confirmedConflicts: string[];
@@ -80,6 +118,9 @@ export interface PersistedState {
   exportCount: number;
   cameraState?: CameraState;
   selectedSlotId: string | null;
+  previewDraft?: ImportPreviewDraft | null;
+  undoSnapshot?: UndoSnapshot | null;
+  currentBatchId?: string | null;
 }
 
 export type ToastType = 'error' | 'warning' | 'info' | 'success';

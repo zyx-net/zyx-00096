@@ -14,6 +14,8 @@ import type {
   ReviewLogEntry,
   RestoreConflict,
   LogActionType,
+  ReviewSnapshotSelection,
+  ReviewState,
 } from '@/types';
 import sampleData from '@/data/sampleWarehouse.json';
 import { detectConflicts, validateLayout } from '@/utils/conflict';
@@ -33,7 +35,20 @@ import {
   saveSession,
   deleteSession,
   getSession,
+  saveReviewSelection,
+  saveReviewSelectedSlotIds,
+  saveReviewLastImportedPackageId,
 } from '@/utils/storage';
+import {
+  computeReviewDiff,
+  createReviewPackage,
+  exportReviewToJSON,
+  exportReviewToCSV,
+  prepareReviewImportPreview,
+  isDuplicateLogEntry,
+  downloadJSON,
+  downloadCSV,
+} from '@/utils/review';
 
 function generateBatchId(): string {
   const rand = Math.random().toString(36).slice(2, 6);
@@ -92,6 +107,7 @@ export interface AppState {
     conflicts: RestoreConflict | null;
   } | null;
   logPanelOpen: boolean;
+  reviewState: ReviewState;
 
   setLayout: (layout: WarehouseLayout) => void;
   prepareImportPreview: (file: File) => Promise<void>;
@@ -131,6 +147,20 @@ export interface AppState {
   getSessionUnconfirmedCount: (session: ReviewSession) => number;
   isSessionArchived: () => boolean;
   _restoreSessionInternal: (session: ReviewSession, mode: 'full' | 'view_only', conflicts: RestoreConflict) => void;
+
+  setReviewEnabled: (enabled: boolean) => void;
+  setReviewSnapshotSelection: (selection: ReviewSnapshotSelection | null) => void;
+  computeReviewDiff: () => void;
+  clearReviewDiff: () => void;
+  toggleReviewSlotSelection: (slotId: string) => void;
+  clearReviewSlotSelection: () => void;
+  exportReviewJSON: (name?: string, description?: string) => void;
+  exportReviewCSV: (name?: string) => void;
+  prepareReviewImport: (file: File) => Promise<void>;
+  cancelReviewImport: () => void;
+  applyReviewImport: () => void;
+  undoReviewImport: () => void;
+  refreshReviewFromStorage: () => void;
 }
 
 export const initialLayout = sampleData as unknown as WarehouseLayout;
@@ -287,6 +317,15 @@ export const useStore = create<AppState>((set, get) => {
     sessionDialogOpen: false,
     conflictRestoreDialog: null,
     logPanelOpen: false,
+    reviewState: {
+      enabled: false,
+      selection: persisted.reviewState?.selection ?? null,
+      diff: null,
+      selectedSlotIds: persisted.reviewState?.selectedSlotIds ?? [],
+      importPreview: null,
+      undoSnapshot: null,
+      lastImportedPackageId: persisted.reviewState?.lastImportedPackageId ?? null,
+    },
 
     setLayout: (layout) => {
       const newConflicts = detectConflicts(layout);
@@ -862,6 +901,368 @@ export const useStore = create<AppState>((set, get) => {
     isSessionArchived: () => {
       const session = get().getActiveSession();
       return session?.status === 'archived';
+    },
+
+    setReviewEnabled: (enabled) => {
+      set((state) => ({
+        reviewState: { ...state.reviewState, enabled },
+      }));
+      if (!enabled) {
+        get().clearReviewDiff();
+      }
+    },
+
+    setReviewSnapshotSelection: (selection) => {
+      set((state) => ({
+        reviewState: { ...state.reviewState, selection, diff: null },
+      }));
+      saveReviewSelection(selection);
+    },
+
+    computeReviewDiff: () => {
+      const state = get();
+      if (!state.reviewState.selection) {
+        state.addToast({ type: 'warning', message: '请先选择两个盘点快照' });
+        return;
+      }
+
+      const diff = computeReviewDiff(state.layout, state.reviewState.selection, state.conflicts);
+      set((state) => ({
+        reviewState: { ...state.reviewState, diff },
+      }));
+
+      const activeSession = get().getActiveSession();
+      if (activeSession) {
+        const metadata = {
+          snapshotA: diff.selection.snapshotAIndex,
+          snapshotB: diff.selection.snapshotBIndex,
+          slotChanges: diff.summary.slotChanges,
+          palletChanges: diff.summary.palletChanges,
+        };
+        if (!isDuplicateLogEntry(activeSession.logs, 'create_review', metadata)) {
+          const log = createLogEntry(
+            activeSession.id,
+            'create_review',
+            `生成复盘对比：快照${diff.selection.snapshotAIndex + 1} vs 快照${diff.selection.snapshotBIndex + 1}`,
+            metadata
+          );
+          activeSession.logs.push(log);
+          saveSession(activeSession);
+          get().refreshSessions();
+        }
+      }
+
+      state.addToast({ type: 'success', message: '复盘对比已生成' });
+    },
+
+    clearReviewDiff: () => {
+      set((state) => ({
+        reviewState: { ...state.reviewState, diff: null, selectedSlotIds: [] },
+      }));
+      saveReviewSelectedSlotIds([]);
+    },
+
+    toggleReviewSlotSelection: (slotId) => {
+      set((state) => {
+        const selected = new Set(state.reviewState.selectedSlotIds);
+        if (selected.has(slotId)) {
+          selected.delete(slotId);
+        } else {
+          selected.add(slotId);
+        }
+        const selectedSlotIds = Array.from(selected);
+        saveReviewSelectedSlotIds(selectedSlotIds);
+        return {
+          reviewState: { ...state.reviewState, selectedSlotIds },
+        };
+      });
+    },
+
+    clearReviewSlotSelection: () => {
+      set((state) => ({
+        reviewState: { ...state.reviewState, selectedSlotIds: [] },
+      }));
+      saveReviewSelectedSlotIds([]);
+    },
+
+    exportReviewJSON: (name, description) => {
+      const state = get();
+      if (!state.reviewState.diff || !state.reviewState.selection) {
+        state.addToast({ type: 'warning', message: '请先生成复盘对比' });
+        return;
+      }
+
+      const pkg = createReviewPackage(
+        state.layout,
+        state.reviewState.selection,
+        state.reviewState.diff,
+        state.reviewState.selectedSlotIds,
+        name,
+        description
+      );
+      const json = exportReviewToJSON(pkg);
+      const safeName = pkg.name.replace(/[\\/:*?"<>|]/g, '_');
+      downloadJSON(`复盘包_${safeName}.json`, json);
+      incrementExportCount();
+
+      const activeSession = get().getActiveSession();
+      if (activeSession) {
+        const metadata = {
+          packageId: pkg.id,
+          packageName: pkg.name,
+          snapshotSelection: pkg.snapshotSelection,
+        };
+        if (!isDuplicateLogEntry(activeSession.logs, 'export_review_json', metadata)) {
+          const log = createLogEntry(
+            activeSession.id,
+            'export_review_json',
+            `导出复盘包JSON：${pkg.name}`,
+            metadata
+          );
+          activeSession.logs.push(log);
+          activeSession.lastOpenedAt = new Date().toISOString();
+          saveSession(activeSession);
+          get().refreshSessions();
+        }
+      }
+
+      state.addToast({ type: 'success', message: '复盘包已导出' });
+    },
+
+    exportReviewCSV: (name) => {
+      const state = get();
+      if (!state.reviewState.diff || !state.reviewState.selection) {
+        state.addToast({ type: 'warning', message: '请先生成复盘对比' });
+        return;
+      }
+
+      const pkg = createReviewPackage(
+        state.layout,
+        state.reviewState.selection,
+        state.reviewState.diff,
+        state.reviewState.selectedSlotIds,
+        name
+      );
+      const csvs = exportReviewToCSV(pkg);
+      const safeName = pkg.name.replace(/[\\/:*?"<>|]/g, '_');
+      downloadCSV(`复盘_${safeName}_摘要.csv`, csvs.summaryCSV);
+      downloadCSV(`复盘_${safeName}_货位变化.csv`, csvs.slotsCSV);
+      downloadCSV(`复盘_${safeName}_托盘变化.csv`, csvs.palletsCSV);
+      downloadCSV(`复盘_${safeName}_确认记录.csv`, csvs.confirmationsCSV);
+      incrementExportCount();
+
+      const activeSession = get().getActiveSession();
+      if (activeSession) {
+        const metadata = { packageId: pkg.id, packageName: pkg.name };
+        if (!isDuplicateLogEntry(activeSession.logs, 'export_review_csv', metadata)) {
+          const log = createLogEntry(
+            activeSession.id,
+            'export_review_csv',
+            `导出复盘包CSV：${pkg.name}`,
+            metadata
+          );
+          activeSession.logs.push(log);
+          activeSession.lastOpenedAt = new Date().toISOString();
+          saveSession(activeSession);
+          get().refreshSessions();
+        }
+      }
+
+      state.addToast({ type: 'success', message: '复盘CSV已导出' });
+    },
+
+    prepareReviewImport: async (file) => {
+      const state = get();
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        const preview = prepareReviewImportPreview(data, state.layout);
+
+        set((state) => ({
+          reviewState: { ...state.reviewState, importPreview: preview },
+        }));
+
+        if (!preview.valid) {
+          state.addToast({ type: 'error', message: `复盘包校验失败：${preview.validationErrors[0]}` });
+          return;
+        }
+
+        if (preview.conflicts.length > 0) {
+          const blockCount = preview.conflicts.filter((c) => c.severity === 'block').length;
+          const warnCount = preview.conflicts.filter((c) => c.severity === 'warn').length;
+          if (blockCount > 0) {
+            state.addToast({
+              type: 'error',
+              message: `复盘包存在${blockCount}项阻断冲突，仅可查看`,
+            });
+          } else if (warnCount > 0) {
+            state.addToast({
+              type: 'warning',
+              message: `复盘包存在${warnCount}项警告冲突，将以只读模式应用`,
+            });
+          } else {
+            state.addToast({ type: 'info', message: `已生成复盘包预览：${preview.package?.name}` });
+          }
+        } else {
+          state.addToast({ type: 'info', message: `已生成复盘包预览：${preview.package?.name}` });
+        }
+      } catch {
+        set((state) => ({
+          reviewState: {
+            ...state.reviewState,
+            importPreview: {
+              valid: false,
+              package: null,
+              conflicts: [],
+              validationErrors: ['JSON 解析失败，请检查文件格式'],
+              isParseError: true,
+              canApply: false,
+              applyMode: 'view_only',
+            },
+          },
+        }));
+        state.addToast({ type: 'error', message: '复盘包解析失败' });
+      }
+    },
+
+    cancelReviewImport: () => {
+      set((state) => ({
+        reviewState: { ...state.reviewState, importPreview: null },
+      }));
+      get().addToast({ type: 'info', message: '已取消复盘包导入' });
+    },
+
+    applyReviewImport: () => {
+      const state = get();
+      const preview = state.reviewState.importPreview;
+      if (!preview || !preview.valid || !preview.package) {
+        state.addToast({ type: 'error', message: '没有可应用的复盘包' });
+        return;
+      }
+
+      if (!preview.canApply) {
+        state.addToast({ type: 'error', message: '该复盘包存在阻断冲突，无法应用' });
+        return;
+      }
+
+      const pkg = preview.package;
+      const activeSession = get().getActiveSession();
+
+      if (activeSession && state.reviewState.lastImportedPackageId === pkg.id) {
+        state.addToast({ type: 'info', message: '该复盘包已应用，无需重复操作' });
+        return;
+      }
+
+      const undoSnapshot = {
+        selectedSlotIds: [...state.reviewState.selectedSlotIds],
+        diff: state.reviewState.diff ? { ...state.reviewState.diff } : null,
+        selection: state.reviewState.selection ? { ...state.reviewState.selection } : null,
+      };
+
+      set((state) => ({
+        reviewState: {
+          ...state.reviewState,
+          selection: pkg.snapshotSelection,
+          diff: pkg.diff,
+          selectedSlotIds: [...pkg.selectedSlotIds],
+          importPreview: null,
+          undoSnapshot,
+          lastImportedPackageId: pkg.id,
+          enabled: true,
+        },
+      }));
+
+      saveReviewSelection(pkg.snapshotSelection);
+      saveReviewSelectedSlotIds(pkg.selectedSlotIds);
+      saveReviewLastImportedPackageId(pkg.id);
+
+      if (activeSession) {
+        const metadata = {
+          packageId: pkg.id,
+          packageName: pkg.name,
+          applyMode: preview.applyMode,
+        };
+        if (!isDuplicateLogEntry(activeSession.logs, 'import_review', metadata)) {
+          const log = createLogEntry(
+            activeSession.id,
+            'import_review',
+            `导入复盘包：${pkg.name}`,
+            metadata
+          );
+          activeSession.logs.push(log);
+        }
+        if (!isDuplicateLogEntry(activeSession.logs, 'apply_review', metadata)) {
+          const log2 = createLogEntry(
+            activeSession.id,
+            'apply_review',
+            `应用复盘包：${pkg.name}（${preview.applyMode === 'full' ? '完整模式' : '只读模式'}）`,
+            metadata
+          );
+          activeSession.logs.push(log2);
+          activeSession.lastOpenedAt = new Date().toISOString();
+          saveSession(activeSession);
+          get().refreshSessions();
+        }
+      }
+
+      state.addToast({ type: 'success', message: `复盘包已应用：${pkg.name}` });
+    },
+
+    undoReviewImport: () => {
+      const state = get();
+      const undoSnapshot = state.reviewState.undoSnapshot;
+      if (!undoSnapshot) {
+        state.addToast({ type: 'warning', message: '没有可撤销的复盘操作' });
+        return;
+      }
+
+      const activeSession = get().getActiveSession();
+      const pkgId = state.reviewState.lastImportedPackageId;
+
+      set((state) => ({
+        reviewState: {
+          ...state.reviewState,
+          selection: undoSnapshot.selection,
+          diff: undoSnapshot.diff,
+          selectedSlotIds: [...undoSnapshot.selectedSlotIds],
+          undoSnapshot: null,
+          lastImportedPackageId: null,
+        },
+      }));
+
+      saveReviewSelection(undoSnapshot.selection);
+      saveReviewSelectedSlotIds(undoSnapshot.selectedSlotIds);
+      saveReviewLastImportedPackageId(null);
+
+      if (activeSession && pkgId) {
+        const metadata = { packageId: pkgId };
+        if (!isDuplicateLogEntry(activeSession.logs, 'undo_review', metadata)) {
+          const log = createLogEntry(
+            activeSession.id,
+            'undo_review',
+            `撤销复盘包应用`,
+            metadata
+          );
+          activeSession.logs.push(log);
+          activeSession.lastOpenedAt = new Date().toISOString();
+          saveSession(activeSession);
+          get().refreshSessions();
+        }
+      }
+
+      state.addToast({ type: 'success', message: '已撤销复盘包应用' });
+    },
+
+    refreshReviewFromStorage: () => {
+      const persisted = loadPersistedState();
+      set((state) => ({
+        reviewState: {
+          ...state.reviewState,
+          selection: persisted.reviewState?.selection ?? state.reviewState.selection,
+          selectedSlotIds: persisted.reviewState?.selectedSlotIds ?? state.reviewState.selectedSlotIds,
+          lastImportedPackageId: persisted.reviewState?.lastImportedPackageId ?? state.reviewState.lastImportedPackageId,
+        },
+      }));
     },
   };
 });

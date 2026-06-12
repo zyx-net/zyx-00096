@@ -11,12 +11,13 @@ const SLOT_DEPTH = 1.2;
 const SLOT_HEIGHT = 1.8;
 const SHELF_THICKNESS = 0.1;
 
-const statusColors: Record<SlotStatus | 'selected', string> = {
+const statusColors: Record<SlotStatus | 'selected' | 'reviewSelected', string> = {
   empty: '#4b5563',
   occupied: '#10b981',
   conflict: '#ef4444',
   warning: '#f59e0b',
   selected: '#3b82f6',
+  reviewSelected: '#a855f7',
 };
 
 const palletStatusColors: Record<PalletStatus, string> = {
@@ -30,21 +31,26 @@ interface SlotMeshProps {
   slot: Slot;
   pallets: Pallet[];
   isSelected: boolean;
+  isReviewSelected: boolean;
   hasConflict: boolean;
   onClick: () => void;
 }
 
-function SlotMesh({ slot, pallets, isSelected, hasConflict, onClick }: SlotMeshProps) {
+function SlotMesh({ slot, pallets, isSelected, isReviewSelected, hasConflict, onClick }: SlotMeshProps) {
   const meshRef = useRef<THREE.Mesh>(null);
   const palletMeshes = useMemo(() => {
     return pallets.filter((p) => p.slotId === slot.id);
   }, [pallets, slot.id]);
 
   const displayStatus: SlotStatus = hasConflict ? 'conflict' : slot.status;
-  const baseColor = isSelected ? statusColors.selected : statusColors[displayStatus];
+  const baseColor = isSelected
+    ? statusColors.selected
+    : isReviewSelected
+    ? statusColors.reviewSelected
+    : statusColors[displayStatus];
 
   useFrame((state) => {
-    if (meshRef.current && isSelected) {
+    if (meshRef.current && (isSelected || isReviewSelected)) {
       const scale = 1 + Math.sin(state.clock.elapsedTime * 3) * 0.03;
       meshRef.current.scale.set(scale, scale, scale);
     }
@@ -70,9 +76,9 @@ function SlotMesh({ slot, pallets, isSelected, hasConflict, onClick }: SlotMeshP
         <meshStandardMaterial
           color={baseColor}
           transparent
-          opacity={isSelected ? 0.9 : 0.6}
+          opacity={isSelected || isReviewSelected ? 0.9 : 0.6}
           emissive={baseColor}
-          emissiveIntensity={isSelected || hasConflict ? 0.3 : 0.1}
+          emissiveIntensity={isSelected || isReviewSelected || hasConflict ? 0.3 : 0.1}
         />
       </mesh>
 
@@ -103,10 +109,15 @@ function SlotMesh({ slot, pallets, isSelected, hasConflict, onClick }: SlotMeshP
           );
         })}
 
-      {isSelected && (
+      {(isSelected || isReviewSelected) && (
         <mesh position={[0, 0, 0]}>
           <boxGeometry args={[SLOT_WIDTH, SLOT_HEIGHT, SLOT_DEPTH]} />
-          <meshBasicMaterial color="#3b82f6" wireframe transparent opacity={0.5} />
+          <meshBasicMaterial
+            color={isSelected ? '#3b82f6' : '#a855f7'}
+            wireframe
+            transparent
+            opacity={0.5}
+          />
         </mesh>
       )}
     </group>
@@ -118,11 +129,12 @@ interface ShelfGroupProps {
   slots: Slot[];
   pallets: Pallet[];
   selectedSlotId: string | null;
+  reviewSelectedSlotIds: Set<string>;
   conflictSlotIds: Set<string>;
   onSlotClick: (slotId: string) => void;
 }
 
-function ShelfGroup({ shelf, slots, pallets, selectedSlotId, conflictSlotIds, onSlotClick }: ShelfGroupProps) {
+function ShelfGroup({ shelf, slots, pallets, selectedSlotId, reviewSelectedSlotIds, conflictSlotIds, onSlotClick }: ShelfGroupProps) {
   const shelfSlots = slots.filter((s) => s.shelfId === shelf.id);
   const width = shelf.columns * SLOT_WIDTH;
   const height = shelf.levels * SLOT_HEIGHT;
@@ -145,6 +157,7 @@ function ShelfGroup({ shelf, slots, pallets, selectedSlotId, conflictSlotIds, on
           slot={slot}
           pallets={pallets}
           isSelected={selectedSlotId === slot.id}
+          isReviewSelected={reviewSelectedSlotIds.has(slot.id)}
           hasConflict={conflictSlotIds.has(slot.id)}
           onClick={() => onSlotClick(slot.id)}
         />
@@ -202,7 +215,7 @@ function CameraController({ onCameraChange }: CameraControllerProps) {
 }
 
 export default function WarehouseScene() {
-  const { layout, selectedSlotId, setSelectedSlotId, conflicts, getCurrentPallets, filters } = useStore();
+  const { layout, selectedSlotId, setSelectedSlotId, conflicts, getCurrentPallets, filters, reviewState, toggleReviewSlotSelection } = useStore();
   const pallets = getCurrentPallets();
 
   const conflictSlotIds = useMemo(() => {
@@ -215,6 +228,10 @@ export default function WarehouseScene() {
     });
     return ids;
   }, [conflicts, pallets]);
+
+  const reviewSelectedSlotIds = useMemo(() => {
+    return new Set(reviewState.selectedSlotIds);
+  }, [reviewState.selectedSlotIds]);
 
   const filteredSlots = useMemo(() => {
     let slots = [...layout.slots];
@@ -236,6 +253,9 @@ export default function WarehouseScene() {
 
   const handleSlotClick = (slotId: string) => {
     setSelectedSlotId(slotId);
+    if (reviewState.enabled) {
+      toggleReviewSlotSelection(slotId);
+    }
   };
 
   return (
@@ -271,6 +291,7 @@ export default function WarehouseScene() {
             slots={filteredSlots}
             pallets={pallets}
             selectedSlotId={selectedSlotId}
+            reviewSelectedSlotIds={reviewSelectedSlotIds}
             conflictSlotIds={conflictSlotIds}
             onSlotClick={handleSlotClick}
           />

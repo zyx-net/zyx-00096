@@ -1,4 +1,4 @@
-import type { PersistedState, CameraState, Filters, ImportPreviewDraft, UndoSnapshot, ReviewSession } from '@/types';
+import type { PersistedState, CameraState, Filters, ImportPreviewDraft, UndoSnapshot, ReviewSession, ReviewSnapshotSelection } from '@/types';
 
 const STORAGE_KEY = 'warehouse_inspection_state';
 
@@ -31,6 +31,7 @@ export function loadPersistedState(): PersistedState {
       undoSnapshot: parsed.undoSnapshot ?? null,
       currentBatchId: parsed.currentBatchId ?? null,
       activeSessionId: parsed.activeSessionId ?? null,
+      reviewState: parsed.reviewState ?? null,
     };
   } catch {
     return { ...defaultState };
@@ -157,4 +158,43 @@ export function getSession(sessionId: string): ReviewSession | undefined {
 
 export function clearAllSessions(): void {
   localStorage.removeItem(SESSIONS_KEY);
+}
+
+export function saveReviewSelection(selection: ReviewSnapshotSelection | null): void {
+  const state = loadPersistedState();
+  state.reviewState = {
+    ...state.reviewState,
+    selection,
+    selectedSlotIds: state.reviewState?.selectedSlotIds || [],
+    lastImportedPackageId: state.reviewState?.lastImportedPackageId || null,
+  };
+  savePersistedState(state);
+}
+
+export function saveReviewSelectedSlotIds(selectedSlotIds: string[]): void {
+  const state = loadPersistedState();
+  state.reviewState = {
+    ...state.reviewState,
+    selection: state.reviewState?.selection || null,
+    selectedSlotIds,
+    lastImportedPackageId: state.reviewState?.lastImportedPackageId || null,
+  };
+  savePersistedState(state);
+}
+
+export function saveReviewLastImportedPackageId(packageId: string | null): void {
+  const state = loadPersistedState();
+  state.reviewState = {
+    ...state.reviewState,
+    selection: state.reviewState?.selection || null,
+    selectedSlotIds: state.reviewState?.selectedSlotIds || [],
+    lastImportedPackageId: packageId,
+  };
+  savePersistedState(state);
+}
+
+export function clearReviewState(): void {
+  const state = loadPersistedState();
+  state.reviewState = undefined;
+  savePersistedState(state);
 }

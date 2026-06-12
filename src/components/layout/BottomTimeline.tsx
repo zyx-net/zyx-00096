@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Play, Pause, SkipBack, SkipForward, Clock } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Clock, GitCompare, X } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import { formatTimestamp } from '@/utils/export';
 
@@ -10,7 +10,12 @@ export default function BottomTimeline() {
     isPlaybackPlaying,
     setPlaybackIndex,
     setPlaybackPlaying,
+    reviewState,
+    setReviewSnapshotSelection,
+    setReviewEnabled,
   } = useStore();
+
+  const { enabled: reviewEnabled, selection: reviewSelection } = reviewState;
 
   const records = layout.inventoryRecords;
   const intervalRef = useRef<number | null>(null);
@@ -56,9 +61,44 @@ export default function BottomTimeline() {
   };
 
   const handleSeek = (index: number) => {
+    if (reviewEnabled) {
+      if (!reviewSelection) {
+        setReviewSnapshotSelection({ snapshotAIndex: index, snapshotBIndex: index });
+      } else {
+        if (reviewSelection.snapshotAIndex === reviewSelection.snapshotBIndex) {
+          setReviewSnapshotSelection({ ...reviewSelection, snapshotBIndex: index });
+        } else {
+          setReviewSnapshotSelection({ snapshotAIndex: index, snapshotBIndex: index });
+        }
+      }
+      return;
+    }
     setPlaybackPlaying(false);
     setPlaybackIndex(index);
   };
+
+  const handleSelectCurrent = () => {
+    if (reviewEnabled) {
+      if (!reviewSelection) {
+        setReviewSnapshotSelection({ snapshotAIndex: -1, snapshotBIndex: -1 });
+      } else {
+        if (reviewSelection.snapshotAIndex === reviewSelection.snapshotBIndex) {
+          setReviewSnapshotSelection({ ...reviewSelection, snapshotBIndex: -1 });
+        } else {
+          setReviewSnapshotSelection({ snapshotAIndex: -1, snapshotBIndex: -1 });
+        }
+      }
+      return;
+    }
+    setPlaybackPlaying(false);
+    setPlaybackIndex(-1);
+  };
+
+  const isSnapshotSelectedA = (index: number) =>
+    reviewSelection?.snapshotAIndex === index;
+
+  const isSnapshotSelectedB = (index: number) =>
+    reviewSelection?.snapshotBIndex === index;
 
   const currentRecord = currentPlaybackIndex >= 0 ? records[currentPlaybackIndex] : null;
 
@@ -67,11 +107,41 @@ export default function BottomTimeline() {
       <div className="bg-slate-900/90 backdrop-blur-md border border-slate-700 rounded-xl p-4 mx-auto max-w-3xl">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <Clock size={16} className="text-blue-400" />
-            <span className="text-sm text-slate-300">历史回放</span>
+            {reviewEnabled ? (
+              <>
+                <GitCompare size={16} className="text-purple-400" />
+                <span className="text-sm text-purple-300">复盘模式</span>
+                {reviewSelection && (
+                  <span className="text-xs text-slate-400">
+                    已选: <span className="text-purple-400">A{reviewSelection.snapshotAIndex + 1}</span>
+                    {' → '}
+                    <span className="text-cyan-400">B{reviewSelection.snapshotBIndex + 1}</span>
+                  </span>
+                )}
+                <button
+                  onClick={() => {
+                    setReviewEnabled(false);
+                    setReviewSnapshotSelection(null);
+                  }}
+                  className="ml-2 p-1 rounded hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
+                  title="退出复盘模式"
+                >
+                  <X size={14} />
+                </button>
+              </>
+            ) : (
+              <>
+                <Clock size={16} className="text-blue-400" />
+                <span className="text-sm text-slate-300">历史回放</span>
+              </>
+            )}
           </div>
           <div className="text-sm">
-            {currentRecord ? (
+            {reviewEnabled ? (
+              <span className="text-slate-400 text-xs">
+                点击快照选择对比项（先选A再选B）
+              </span>
+            ) : currentRecord ? (
               <span className="text-white font-mono">
                 {formatTimestamp(currentRecord.timestamp)}
                 {currentRecord.note && <span className="text-slate-400 ml-2">({currentRecord.note})</span>}
@@ -125,17 +195,30 @@ export default function BottomTimeline() {
 
         <div className="flex items-center justify-between">
           <button
-            onClick={() => {
-              setPlaybackPlaying(false);
-              setPlaybackIndex(-1);
-            }}
-            className={`text-xs px-3 py-1.5 rounded transition-colors ${
-              currentPlaybackIndex === -1
+            onClick={handleSelectCurrent}
+            className={`text-xs px-3 py-1.5 rounded transition-colors relative ${
+              reviewEnabled
+                ? isSnapshotSelectedA(-1)
+                  ? 'bg-purple-600 text-white ring-2 ring-purple-400'
+                  : isSnapshotSelectedB(-1)
+                  ? 'bg-cyan-600 text-white ring-2 ring-cyan-400'
+                  : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'
+                : currentPlaybackIndex === -1
                 ? 'bg-blue-600 text-white'
                 : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'
             }`}
           >
             当前
+            {reviewEnabled && isSnapshotSelectedA(-1) && (
+              <span className="absolute -top-1 -right-1 w-3 h-3 bg-purple-400 rounded-full text-[8px] flex items-center justify-center text-white">
+                A
+              </span>
+            )}
+            {reviewEnabled && isSnapshotSelectedB(-1) && (
+              <span className="absolute -top-1 -right-1 w-3 h-3 bg-cyan-400 rounded-full text-[8px] flex items-center justify-center text-white">
+                B
+              </span>
+            )}
           </button>
 
           <div className="flex-1 flex items-center justify-around mx-2">
@@ -143,19 +226,43 @@ export default function BottomTimeline() {
               <button
                 key={record.id}
                 onClick={() => handleSeek(index)}
-                className="group flex flex-col items-center"
+                className="group flex flex-col items-center relative"
                 title={record.note || formatTimestamp(record.timestamp)}
               >
                 <div
                   className={`w-3 h-3 rounded-full transition-all ${
-                    currentPlaybackIndex === index
+                    reviewEnabled
+                      ? isSnapshotSelectedA(index)
+                        ? 'bg-purple-500 scale-125 ring-2 ring-purple-300'
+                        : isSnapshotSelectedB(index)
+                        ? 'bg-cyan-500 scale-125 ring-2 ring-cyan-300'
+                        : 'bg-slate-600 group-hover:bg-slate-500'
+                      : currentPlaybackIndex === index
                       ? 'bg-blue-500 scale-125'
                       : 'bg-slate-600 group-hover:bg-slate-500'
                   }`}
                 />
+                {reviewEnabled && isSnapshotSelectedA(index) && (
+                  <span className="absolute -top-1 -right-1 w-3 h-3 bg-purple-400 rounded-full text-[8px] flex items-center justify-center text-white">
+                    A
+                  </span>
+                )}
+                {reviewEnabled && isSnapshotSelectedB(index) && (
+                  <span className="absolute -top-1 -right-1 w-3 h-3 bg-cyan-400 rounded-full text-[8px] flex items-center justify-center text-white">
+                    B
+                  </span>
+                )}
                 <span
                   className={`text-xs mt-1 font-mono ${
-                    currentPlaybackIndex === index ? 'text-blue-400' : 'text-slate-500'
+                    reviewEnabled
+                      ? isSnapshotSelectedA(index)
+                        ? 'text-purple-400'
+                        : isSnapshotSelectedB(index)
+                        ? 'text-cyan-400'
+                        : 'text-slate-500'
+                      : currentPlaybackIndex === index
+                      ? 'text-blue-400'
+                      : 'text-slate-500'
                   }`}
                 >
                   {index + 1}

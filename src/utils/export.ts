@@ -61,6 +61,12 @@ function getLogActionLabel(action: LogActionType): string {
     archive_session: '归档会话',
     unarchive_session: '取消归档',
     export_csv: '导出CSV',
+    create_review: '生成复盘',
+    export_review_json: '导出复盘JSON',
+    export_review_csv: '导出复盘CSV',
+    import_review: '导入复盘',
+    apply_review: '应用复盘',
+    undo_review: '撤销复盘',
   };
   return map[action] || action;
 }

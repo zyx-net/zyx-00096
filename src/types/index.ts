@@ -143,7 +143,139 @@ export type LogActionType =
   | 'rename_session'
   | 'archive_session'
   | 'unarchive_session'
-  | 'export_csv';
+  | 'export_csv'
+  | 'create_review'
+  | 'export_review_json'
+  | 'export_review_csv'
+  | 'import_review'
+  | 'apply_review'
+  | 'undo_review';
+
+export type ChangeType = 'added' | 'removed' | 'modified' | 'unchanged';
+
+export interface ReviewSnapshotSelection {
+  snapshotAIndex: number;
+  snapshotBIndex: number;
+}
+
+export interface SlotDiffItem {
+  slotId: string;
+  changeType: ChangeType;
+  statusA?: SlotStatus;
+  statusB?: SlotStatus;
+  shelfId: string;
+}
+
+export interface PalletDiffItem {
+  palletId: string;
+  changeType: ChangeType;
+  palletNo: string;
+  statusA?: PalletStatus;
+  statusB?: PalletStatus;
+  slotIdA?: string;
+  slotIdB?: string;
+  sku?: string;
+  quantity?: number;
+}
+
+export interface ConfirmationDiffItem {
+  conflictId: string;
+  changeType: ChangeType;
+  description: string;
+  type: ConflictType;
+  confirmedA: boolean;
+  confirmedB: boolean;
+  confirmedAtA?: string;
+  confirmedAtB?: string;
+  confirmedByA?: string;
+  confirmedByB?: string;
+}
+
+export interface ReviewDiffSummary {
+  slotChanges: {
+    added: number;
+    removed: number;
+    modified: number;
+    unchanged: number;
+  };
+  palletChanges: {
+    added: number;
+    removed: number;
+    modified: number;
+    unchanged: number;
+  };
+  confirmationChanges: {
+    added: number;
+    removed: number;
+    modified: number;
+    unchanged: number;
+  };
+}
+
+export interface ReviewDiff {
+  selection: ReviewSnapshotSelection;
+  summary: ReviewDiffSummary;
+  slotDiffs: SlotDiffItem[];
+  palletDiffs: PalletDiffItem[];
+  confirmationDiffs: ConfirmationDiffItem[];
+  createdAt: string;
+}
+
+export interface ReviewPackage {
+  id: string;
+  version: string;
+  name: string;
+  description?: string;
+  layoutName: string;
+  createdAt: string;
+  snapshotSelection: ReviewSnapshotSelection;
+  snapshotA: {
+    timestamp: string;
+    note?: string;
+    pallets: Pallet[];
+    conflicts: Conflict[];
+  };
+  snapshotB: {
+    timestamp: string;
+    note?: string;
+    pallets: Pallet[];
+    conflicts: Conflict[];
+  };
+  diff: ReviewDiff;
+  selectedSlotIds: string[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface ReviewImportConflict {
+  type: 'layout_mismatch' | 'snapshot_missing' | 'version_incompatible';
+  severity: 'block' | 'warn' | 'info';
+  message: string;
+  details?: string[];
+}
+
+export interface ReviewImportPreview {
+  valid: boolean;
+  package: ReviewPackage | null;
+  conflicts: ReviewImportConflict[];
+  validationErrors: string[];
+  isParseError: boolean;
+  canApply: boolean;
+  applyMode: 'full' | 'view_only';
+}
+
+export interface ReviewState {
+  enabled: boolean;
+  selection: ReviewSnapshotSelection | null;
+  diff: ReviewDiff | null;
+  selectedSlotIds: string[];
+  importPreview: ReviewImportPreview | null;
+  undoSnapshot: {
+    selectedSlotIds: string[];
+    diff: ReviewDiff | null;
+    selection: ReviewSnapshotSelection | null;
+  } | null;
+  lastImportedPackageId: string | null;
+}
 
 export interface ReviewLogEntry {
   id: string;
@@ -192,4 +324,9 @@ export interface PersistedState {
   undoSnapshot?: UndoSnapshot | null;
   currentBatchId?: string | null;
   activeSessionId?: string | null;
+  reviewState?: {
+    selection: ReviewSnapshotSelection | null;
+    selectedSlotIds: string[];
+    lastImportedPackageId: string | null;
+  };
 }

@@ -1,4 +1,4 @@
-import { ScrollText, X, CheckCircle, XCircle, Upload, Undo2, FolderOpen, Plus, Edit3, Archive, Download } from 'lucide-react';
+import { ScrollText, X, CheckCircle, XCircle, Upload, Undo2, FolderOpen, Plus, Edit3, Archive, Download, FileText, FileSpreadsheet, Import, Play, RotateCcw, Eye } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import { formatTimestamp } from '@/utils/export';
 import type { LogActionType, ReviewLogEntry } from '@/types';
@@ -14,6 +14,12 @@ const actionLabels: Record<LogActionType, string> = {
   archive_session: '归档会话',
   unarchive_session: '取消归档',
   export_csv: '导出CSV',
+  create_review: '生成复盘',
+  export_review_json: '导出复盘JSON',
+  export_review_csv: '导出复盘CSV',
+  import_review: '导入复盘',
+  apply_review: '应用复盘',
+  undo_review: '撤销复盘',
 };
 
 const actionIcons: Record<LogActionType, typeof CheckCircle> = {
@@ -27,6 +33,12 @@ const actionIcons: Record<LogActionType, typeof CheckCircle> = {
   archive_session: Archive,
   unarchive_session: Archive,
   export_csv: Download,
+  create_review: Eye,
+  export_review_json: FileText,
+  export_review_csv: FileSpreadsheet,
+  import_review: Import,
+  apply_review: Play,
+  undo_review: RotateCcw,
 };
 
 const actionColors: Record<LogActionType, string> = {
@@ -40,6 +52,12 @@ const actionColors: Record<LogActionType, string> = {
   archive_session: 'text-slate-400 bg-slate-700/50',
   unarchive_session: 'text-teal-400 bg-teal-900/30',
   export_csv: 'text-pink-400 bg-pink-900/30',
+  create_review: 'text-purple-400 bg-purple-900/30',
+  export_review_json: 'text-indigo-400 bg-indigo-900/30',
+  export_review_csv: 'text-sky-400 bg-sky-900/30',
+  import_review: 'text-rose-400 bg-rose-900/30',
+  apply_review: 'text-violet-400 bg-violet-900/30',
+  undo_review: 'text-orange-400 bg-orange-900/30',
 };
 
 export default function ReviewLogPanel() {

@@ -5,6 +5,7 @@ import { exportConflictsToCSV, downloadCSV, formatTimestamp, exportSessionToCSV 
 import type { ConflictType } from '@/types';
 import { useState } from 'react';
 import { ImportPreviewPanel } from './ImportPreviewPanel';
+import ReviewPanel from './ReviewPanel';
 
 export default function RightPanel() {
   const { conflicts, confirmConflict, unconfirmConflict, rightPanelOpen, setSelectedSlotId, getCurrentPallets, incrementExport, currentBatchId, previewDraft, getActiveSession, isSessionArchived } = useStore();
@@ -119,7 +120,8 @@ export default function RightPanel() {
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          <div className="px-3 pt-3">
+          <div className="px-3 pt-3 space-y-3">
+            <ReviewPanel />
             <ImportPreviewPanel />
           </div>
           {filteredConflicts.length > 0 ? (

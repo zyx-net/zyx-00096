@@ -1,6 +1,7 @@
 import { useRef, useMemo, useEffect } from 'react';
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Grid, Html } from '@react-three/drei';
+import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import * as THREE from 'three';
 import { useStore } from '@/store/useStore';
 import type { Shelf, Slot, Pallet, SlotStatus, PalletStatus } from '@/types';
@@ -163,8 +164,7 @@ interface CameraControllerProps {
 }
 
 function CameraController({ onCameraChange }: CameraControllerProps) {
-  const { camera } = useThree();
-  const controlsRef = useRef<any>(null);
+  const controlsRef = useRef<OrbitControlsImpl>(null);
   const { cameraState, setCameraState } = useStore();
 
   useEffect(() => {
@@ -173,7 +173,7 @@ function CameraController({ onCameraChange }: CameraControllerProps) {
       controlsRef.current.target.set(cameraState.target.x, cameraState.target.y, cameraState.target.z);
       controlsRef.current.update();
     }
-  }, []);
+  }, [cameraState]);
 
   const handleChange = () => {
     if (controlsRef.current) {

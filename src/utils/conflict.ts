@@ -111,6 +111,45 @@ export function validateLayout(data: unknown): { valid: boolean; errors: string[
     return { valid: false, errors };
   }
 
+  const shelves = obj.shelves as unknown[];
+  shelves.forEach((shelf, index) => {
+    if (!shelf || typeof shelf !== 'object') {
+      errors.push(`货架[${index}]: 不是有效的对象`);
+      return;
+    }
+    const s = shelf as Record<string, unknown>;
+    if (!s.id || typeof s.id !== 'string') {
+      errors.push(`货架[${index}]: 缺少或无效的 id 字段`);
+    }
+    if (!s.name || typeof s.name !== 'string') {
+      errors.push(`货架[${index}]: 缺少或无效的 name 字段`);
+    }
+    if (typeof s.columns !== 'number' || !Number.isFinite(s.columns) || s.columns <= 0) {
+      errors.push(`货架[${index}]: columns 必须为正整数，当前值: ${String(s.columns)}`);
+    }
+    if (typeof s.levels !== 'number' || !Number.isFinite(s.levels) || s.levels <= 0) {
+      errors.push(`货架[${index}]: levels 必须为正整数，当前值: ${String(s.levels)}`);
+    }
+    if (typeof s.rows !== 'number' || !Number.isFinite(s.rows) || s.rows <= 0) {
+      errors.push(`货架[${index}]: rows 必须为正整数，当前值: ${String(s.rows)}`);
+    }
+    if (!s.position || typeof s.position !== 'object') {
+      errors.push(`货架[${index}]: 缺少或无效的 position 对象`);
+    } else {
+      const pos = s.position as Record<string, unknown>;
+      if (typeof pos.x !== 'number' || !Number.isFinite(pos.x)) {
+        errors.push(`货架[${index}]: position.x 必须为有效数字，当前值: ${String(pos.x)}`);
+      }
+      if (typeof pos.z !== 'number' || !Number.isFinite(pos.z)) {
+        errors.push(`货架[${index}]: position.z 必须为有效数字，当前值: ${String(pos.z)}`);
+      }
+    }
+  });
+
+  if (errors.length > 0) {
+    return { valid: false, errors };
+  }
+
   return { valid: true, errors: [], layout: data as WarehouseLayout };
 }
 

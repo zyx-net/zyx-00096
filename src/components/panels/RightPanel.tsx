@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle, Download, Filter, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Download } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import { getConflictTypeLabel, getConflictTypeColor } from '@/utils/conflict';
 import { exportConflictsToCSV, downloadCSV, formatTimestamp } from '@/utils/export';

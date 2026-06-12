@@ -16,7 +16,6 @@ export default function TopToolbar() {
     toggleLeftPanel,
     toggleRightPanel,
     getExportCount,
-    cameraState,
   } = useStore();
 
   const exportCount = getExportCount();

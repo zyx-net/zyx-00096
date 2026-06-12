@@ -89,17 +89,21 @@ export const useStore = create<AppState>((set, get) => {
             type: 'error',
             message: `布局配置损坏：${result.errors.join('；')}`,
           });
-          set({
-            conflicts: [
-              {
-                id: 'damaged-layout',
-                type: 'damaged_layout',
-                description: `布局配置文件损坏：${result.errors.join('；')}`,
-                relatedIds: [],
-                confirmed: false,
-              },
-            ],
+          const currentLayout = get().layout;
+          const currentConflicts = detectConflicts(currentLayout);
+          const persisted = loadPersistedState();
+          const mergedConflicts = currentConflicts.map((c) => ({
+            ...c,
+            confirmed: persisted.confirmedConflicts.includes(c.id),
+          }));
+          mergedConflicts.push({
+            id: `damaged-layout-${Date.now()}`,
+            type: 'damaged_layout',
+            description: `布局配置文件损坏：${result.errors.join('；')}`,
+            relatedIds: [],
+            confirmed: false,
           });
+          set({ conflicts: mergedConflicts });
           return;
         }
         const newConflicts = detectConflicts(result.layout);
@@ -111,22 +115,26 @@ export const useStore = create<AppState>((set, get) => {
           type: 'success',
           message: `布局导入成功：${result.layout.name}`,
         });
-      } catch (err) {
+      } catch {
         get().addToast({
           type: 'error',
           message: '布局配置解析失败，请检查JSON格式',
         });
-        set({
-          conflicts: [
-            {
-              id: 'damaged-layout-parse',
-              type: 'damaged_layout',
-              description: '布局配置解析失败：JSON格式错误',
-              relatedIds: [],
-              confirmed: false,
-            },
-          ],
+        const currentLayout = get().layout;
+        const currentConflicts = detectConflicts(currentLayout);
+        const persisted = loadPersistedState();
+        const mergedConflicts = currentConflicts.map((c) => ({
+          ...c,
+          confirmed: persisted.confirmedConflicts.includes(c.id),
+        }));
+        mergedConflicts.push({
+          id: `damaged-layout-parse-${Date.now()}`,
+          type: 'damaged_layout',
+          description: '布局配置解析失败：JSON格式错误',
+          relatedIds: [],
+          confirmed: false,
         });
+        set({ conflicts: mergedConflicts });
       }
     },
 

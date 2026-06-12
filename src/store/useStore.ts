@@ -69,7 +69,7 @@ function computeDiff(current: WarehouseLayout, next: WarehouseLayout): ImportDif
   return { addedSlotIds, removedSlotIds, overwrittenSlotIds, addedPalletIds, removedPalletIds };
 }
 
-interface AppState {
+export interface AppState {
   layout: WarehouseLayout;
   conflicts: Conflict[];
   filters: Filters;
@@ -133,7 +133,7 @@ interface AppState {
   _restoreSessionInternal: (session: ReviewSession, mode: 'full' | 'view_only', conflicts: RestoreConflict) => void;
 }
 
-const initialLayout = sampleData as unknown as WarehouseLayout;
+export const initialLayout = sampleData as unknown as WarehouseLayout;
 
 function generateSessionId(): string {
   const rand = Math.random().toString(36).slice(2, 8);
@@ -201,15 +201,78 @@ export const useStore = create<AppState>((set, get) => {
     confirmed: persisted.confirmedConflicts.includes(c.id),
   }));
 
+  function applyRestoreInternal(session: ReviewSession, mode: 'full' | 'view_only', conflicts: RestoreConflict): void {
+    if (mode === 'full' && hasRestoreConflicts(conflicts)) {
+      mode = 'view_only';
+    }
+
+    if (mode === 'full' && session.status === 'archived') {
+      session.status = 'active';
+      const unarchiveLog = createLogEntry(session.id, 'unarchive_session', `自动恢复会话时取消归档：${session.name}`);
+      session.logs.push(unarchiveLog);
+    }
+
+    if (mode === 'view_only') {
+      set({
+        filters: session.filters,
+        cameraState: session.cameraState,
+        activeSessionId: session.id,
+      });
+      saveFilters(session.filters);
+      if (session.cameraState) saveCameraState(session.cameraState);
+    } else {
+      const restoredConflicts = session.conflicts.map((c) => ({ ...c }));
+      set({
+        conflicts: restoredConflicts,
+        filters: session.filters,
+        selectedSlotId: session.selectedSlotId,
+        currentPlaybackIndex: session.playbackIndex,
+        cameraState: session.cameraState,
+        activeSessionId: session.id,
+      });
+      const confirmedIds = session.confirmedConflictIds;
+      saveConfirmedConflicts(confirmedIds);
+      saveFilters(session.filters);
+      saveSelectedSlotId(session.selectedSlotId);
+      savePlaybackIndex(session.playbackIndex);
+      if (session.cameraState) saveCameraState(session.cameraState);
+    }
+
+    saveActiveSessionId(session.id);
+    session.lastOpenedAt = new Date().toISOString();
+    const log = createLogEntry(session.id, 'restore_session', `页面加载时自动恢复会话：${session.name}`, {
+      restoreMode: mode,
+    });
+    session.logs.push(log);
+    saveSession(session);
+  }
+
+  let initialActiveSession: ReviewSession | null = null;
+  if (persisted.activeSessionId && !persisted.currentBatchId && !persisted.previewDraft) {
+    const session = initialSessions.find((s) => s.id === persisted.activeSessionId);
+    if (session && session.status === 'active') {
+      const restoreConflicts = detectRestoreConflicts(session, initialLayout);
+      const mode = hasRestoreConflicts(restoreConflicts) ? 'view_only' : 'full';
+      applyRestoreInternal(session, mode, restoreConflicts);
+      initialActiveSession = session;
+    }
+  }
+
   return {
     layout: initialLayout,
-    conflicts: conflictsWithPersistedConfirm,
-    filters: persisted.filters,
-    selectedSlotId: persisted.selectedSlotId,
-    currentPlaybackIndex: persisted.currentPlaybackIndex,
+    conflicts: initialActiveSession && !hasRestoreConflicts(detectRestoreConflicts(initialActiveSession, initialLayout))
+      ? initialActiveSession.conflicts.map((c) => ({ ...c }))
+      : conflictsWithPersistedConfirm,
+    filters: initialActiveSession?.filters ?? persisted.filters,
+    selectedSlotId: initialActiveSession && !hasRestoreConflicts(detectRestoreConflicts(initialActiveSession, initialLayout))
+      ? initialActiveSession.selectedSlotId
+      : persisted.selectedSlotId,
+    currentPlaybackIndex: initialActiveSession && !hasRestoreConflicts(detectRestoreConflicts(initialActiveSession, initialLayout))
+      ? initialActiveSession.playbackIndex
+      : persisted.currentPlaybackIndex,
     isPlaybackPlaying: false,
     toasts: [],
-    cameraState: persisted.cameraState,
+    cameraState: initialActiveSession?.cameraState ?? persisted.cameraState,
     leftPanelOpen: true,
     rightPanelOpen: true,
     previewDraft: persisted.previewDraft ?? null,
@@ -460,11 +523,13 @@ export const useStore = create<AppState>((set, get) => {
     setFilters: (filters) => {
       set({ filters });
       saveFilters(filters);
+      get().updateActiveSession();
     },
 
     setSelectedSlotId: (id) => {
       set({ selectedSlotId: id });
       saveSelectedSlotId(id);
+      get().updateActiveSession();
     },
 
     confirmConflict: (conflictId) => {
@@ -490,10 +555,8 @@ export const useStore = create<AppState>((set, get) => {
           conflictType: conflict.type,
         });
         activeSession.logs.push(log);
-        activeSession.confirmedConflictIds.push(conflictId);
-        activeSession.lastOpenedAt = new Date().toISOString();
         saveSession(activeSession);
-        get().refreshSessions();
+        get().updateActiveSession();
       }
       get().addToast({
         type: 'success',
@@ -522,10 +585,8 @@ export const useStore = create<AppState>((set, get) => {
           conflictType: conflict.type,
         });
         activeSession.logs.push(log);
-        activeSession.confirmedConflictIds = activeSession.confirmedConflictIds.filter((id) => id !== conflictId);
-        activeSession.lastOpenedAt = new Date().toISOString();
         saveSession(activeSession);
-        get().refreshSessions();
+        get().updateActiveSession();
       }
       get().addToast({
         type: 'info',
@@ -536,6 +597,7 @@ export const useStore = create<AppState>((set, get) => {
     setPlaybackIndex: (index) => {
       set({ currentPlaybackIndex: index });
       savePlaybackIndex(index);
+      get().updateActiveSession();
     },
 
     setPlaybackPlaying: (playing) => {
@@ -569,6 +631,7 @@ export const useStore = create<AppState>((set, get) => {
     setCameraState: (state) => {
       set({ cameraState: state });
       saveCameraState(state);
+      get().updateActiveSession();
     },
 
     toggleLeftPanel: () => {
@@ -744,58 +807,21 @@ export const useStore = create<AppState>((set, get) => {
 
     _restoreSessionInternal: (session, mode, conflicts) => {
       const state = get();
+      const hadConflicts = mode === 'full' && hasRestoreConflicts(conflicts);
 
-      if (mode === 'full' && hasRestoreConflicts(conflicts)) {
+      if (hadConflicts) {
         state.addToast({
           type: 'warning',
           message: '布局不匹配，仅恢复视角和筛选条件',
         });
-        mode = 'view_only';
       }
 
-      if (mode === 'full' && session.status === 'archived') {
-        session.status = 'active';
-        const unarchiveLog = createLogEntry(session.id, 'unarchive_session', `恢复会话时自动取消归档：${session.name}`);
-        session.logs.push(unarchiveLog);
-      }
-
-      if (mode === 'view_only') {
-        set({
-          filters: session.filters,
-          cameraState: session.cameraState,
-          activeSessionId: session.id,
-        });
-        saveFilters(session.filters);
-        if (session.cameraState) saveCameraState(session.cameraState);
-      } else {
-        const restoredConflicts = session.conflicts.map((c) => ({ ...c }));
-        set({
-          conflicts: restoredConflicts,
-          filters: session.filters,
-          selectedSlotId: session.selectedSlotId,
-          currentPlaybackIndex: session.playbackIndex,
-          cameraState: session.cameraState,
-          activeSessionId: session.id,
-        });
-        const confirmedIds = session.confirmedConflictIds;
-        saveConfirmedConflicts(confirmedIds);
-        saveFilters(session.filters);
-        saveSelectedSlotId(session.selectedSlotId);
-        savePlaybackIndex(session.playbackIndex);
-        if (session.cameraState) saveCameraState(session.cameraState);
-      }
-
-      saveActiveSessionId(session.id);
-
-      session.lastOpenedAt = new Date().toISOString();
-      const log = createLogEntry(session.id, 'restore_session', `恢复会话：${session.name}`, {
-        restoreMode: mode,
-      });
-      session.logs.push(log);
-      saveSession(session);
+      applyRestoreInternal(session, mode, conflicts);
       state.refreshSessions();
 
-      state.addToast({ type: 'success', message: `已恢复会话：${session.name}` });
+      if (!hadConflicts) {
+        state.addToast({ type: 'success', message: `已恢复会话：${session.name}` });
+      }
     },
 
     refreshSessions: () => {

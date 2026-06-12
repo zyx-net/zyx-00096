@@ -1,4 +1,4 @@
-import type { PersistedState, CameraState, Filters, ImportPreviewDraft, UndoSnapshot, ReviewSession, ReviewSnapshotSelection } from '@/types';
+import type { PersistedState, CameraState, Filters, ImportPreviewDraft, UndoSnapshot, ReviewSession, ReviewSnapshotSelection, ReviewDiff } from '@/types';
 
 const STORAGE_KEY = 'warehouse_inspection_state';
 
@@ -167,6 +167,7 @@ export function saveReviewSelection(selection: ReviewSnapshotSelection | null): 
     selection,
     selectedSlotIds: state.reviewState?.selectedSlotIds || [],
     lastImportedPackageId: state.reviewState?.lastImportedPackageId || null,
+    diff: state.reviewState?.diff ?? null,
   };
   savePersistedState(state);
 }
@@ -178,6 +179,7 @@ export function saveReviewSelectedSlotIds(selectedSlotIds: string[]): void {
     selection: state.reviewState?.selection || null,
     selectedSlotIds,
     lastImportedPackageId: state.reviewState?.lastImportedPackageId || null,
+    diff: state.reviewState?.diff ?? null,
   };
   savePersistedState(state);
 }
@@ -189,6 +191,19 @@ export function saveReviewLastImportedPackageId(packageId: string | null): void 
     selection: state.reviewState?.selection || null,
     selectedSlotIds: state.reviewState?.selectedSlotIds || [],
     lastImportedPackageId: packageId,
+    diff: state.reviewState?.diff ?? null,
+  };
+  savePersistedState(state);
+}
+
+export function saveReviewDiff(diff: ReviewDiff | null): void {
+  const state = loadPersistedState();
+  state.reviewState = {
+    ...state.reviewState,
+    selection: state.reviewState?.selection || null,
+    selectedSlotIds: state.reviewState?.selectedSlotIds || [],
+    lastImportedPackageId: state.reviewState?.lastImportedPackageId || null,
+    diff,
   };
   savePersistedState(state);
 }

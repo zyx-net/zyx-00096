@@ -464,3 +464,130 @@ describe('复盘功能 - 日志幂等', () => {
     expect(state2.reviewState.selection).toEqual(selection);
   });
 });
+
+describe('复盘功能 - 导入复盘包后刷新 diff 不丢失', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    vi.clearAllMocks();
+  });
+
+  it('回归：导入复盘包后重建 store（模拟刷新），diff/selection/selectedSlotIds/lastImportedPackageId 均完整恢复，importPreview 不持久化', async () => {
+    const { useStore: store, initialLayout } = await loadStoreFresh();
+    const session = await createTestSession(initialLayout);
+    saveAllSessions([session]);
+
+    let state = store.getState();
+    state.setReviewEnabled(true);
+    state.toggleReviewSlotSelection('slot-before-import-001');
+    state = store.getState();
+
+    const selection: ReviewSnapshotSelection = { snapshotAIndex: 0, snapshotBIndex: 1 };
+    const pkg = createTestReviewPackage(initialLayout, selection);
+    const preview = prepareReviewImportPreview(pkg, initialLayout);
+
+    (store as unknown as { setState: (p: Partial<AppState>) => void }).setState({
+      reviewState: { ...state.reviewState, importPreview: preview },
+      activeSessionId: session.id,
+    });
+
+    store.getState().applyReviewImport();
+    state = store.getState();
+
+    expect(state.reviewState.diff).not.toBeNull();
+    expect(state.reviewState.diff?.summary).toEqual(pkg.diff.summary);
+    expect(state.reviewState.selection).toEqual(pkg.snapshotSelection);
+    expect(state.reviewState.selectedSlotIds).toEqual(pkg.selectedSlotIds);
+    expect(state.reviewState.lastImportedPackageId).toBe(pkg.id);
+    expect(state.reviewState.importPreview).toBeNull();
+    expect(state.reviewState.undoSnapshot).not.toBeNull();
+
+    const { useStore: store2 } = await loadStoreFresh();
+    const state2 = store2.getState();
+
+    expect(state2.reviewState.diff).not.toBeNull();
+    expect(state2.reviewState.diff?.summary).toEqual(pkg.diff.summary);
+    expect(state2.reviewState.diff?.slotDiffs.length).toBe(pkg.diff.slotDiffs.length);
+    expect(state2.reviewState.diff?.palletDiffs.length).toBe(pkg.diff.palletDiffs.length);
+    expect(state2.reviewState.selection).toEqual(pkg.snapshotSelection);
+    expect(state2.reviewState.selectedSlotIds).toEqual(pkg.selectedSlotIds);
+    expect(state2.reviewState.lastImportedPackageId).toBe(pkg.id);
+    expect(state2.reviewState.importPreview).toBeNull();
+    expect(state2.reviewState.undoSnapshot).toBeNull();
+  });
+
+  it('回归：导入复盘包后调用 refreshReviewFromStorage，diff 仍完整，其他状态未被破坏', async () => {
+    const { useStore: store, initialLayout } = await loadStoreFresh();
+    const session = await createTestSession(initialLayout);
+    saveAllSessions([session]);
+
+    const selection: ReviewSnapshotSelection = { snapshotAIndex: 0, snapshotBIndex: 2 };
+    const pkg = createTestReviewPackage(initialLayout, selection);
+    const preview = prepareReviewImportPreview(pkg, initialLayout);
+
+    let state = store.getState();
+    (store as unknown as { setState: (p: Partial<AppState>) => void }).setState({
+      reviewState: { ...state.reviewState, importPreview: preview, enabled: true },
+      activeSessionId: session.id,
+    });
+
+    store.getState().applyReviewImport();
+    state = store.getState();
+    const originalDiffSummary = state.reviewState.diff?.summary;
+    const originalSelection = state.reviewState.selection;
+    const originalSlotIds = [...state.reviewState.selectedSlotIds];
+    const originalPackageId = state.reviewState.lastImportedPackageId;
+
+    (store as unknown as { setState: (p: Partial<AppState>) => void }).setState({
+      reviewState: { ...state.reviewState, diff: null },
+    });
+    expect(store.getState().reviewState.diff).toBeNull();
+
+    store.getState().refreshReviewFromStorage();
+    const refreshed = store.getState();
+
+    expect(refreshed.reviewState.diff).not.toBeNull();
+    expect(refreshed.reviewState.diff?.summary).toEqual(originalDiffSummary);
+    expect(refreshed.reviewState.selection).toEqual(originalSelection);
+    expect(refreshed.reviewState.selectedSlotIds).toEqual(originalSlotIds);
+    expect(refreshed.reviewState.lastImportedPackageId).toBe(originalPackageId);
+  });
+
+  it('回归：撤销复盘导入后刷新，diff 也跟着撤销到之前的状态', async () => {
+    const { useStore: store, initialLayout } = await loadStoreFresh();
+
+    let state = store.getState();
+    state.setReviewEnabled(true);
+    const beforeSelection: ReviewSnapshotSelection = { snapshotAIndex: -1, snapshotBIndex: -1 };
+    state.setReviewSnapshotSelection(beforeSelection);
+    state.computeReviewDiff();
+    state.toggleReviewSlotSelection('slot-native-001');
+    state = store.getState();
+    const beforeDiff = state.reviewState.diff;
+    const beforeSlotIds = [...state.reviewState.selectedSlotIds];
+
+    const importSelection: ReviewSnapshotSelection = { snapshotAIndex: 0, snapshotBIndex: 1 };
+    const pkg = createTestReviewPackage(initialLayout, importSelection);
+    const preview = prepareReviewImportPreview(pkg, initialLayout);
+
+    (store as unknown as { setState: (p: Partial<AppState>) => void }).setState({
+      reviewState: { ...state.reviewState, importPreview: preview },
+    });
+
+    store.getState().applyReviewImport();
+    expect(store.getState().reviewState.lastImportedPackageId).toBe(pkg.id);
+
+    store.getState().undoReviewImport();
+    state = store.getState();
+    expect(state.reviewState.lastImportedPackageId).toBeNull();
+    expect(state.reviewState.selectedSlotIds).toEqual(beforeSlotIds);
+
+    const { useStore: store2 } = await loadStoreFresh();
+    const state2 = store2.getState();
+
+    expect(state2.reviewState.lastImportedPackageId).toBeNull();
+    expect(state2.reviewState.selectedSlotIds).toEqual(beforeSlotIds);
+    if (beforeDiff) {
+      expect(state2.reviewState.diff?.summary).toEqual(beforeDiff.summary);
+    }
+  });
+});

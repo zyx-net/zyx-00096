@@ -328,5 +328,6 @@ export interface PersistedState {
     selection: ReviewSnapshotSelection | null;
     selectedSlotIds: string[];
     lastImportedPackageId: string | null;
+    diff: ReviewDiff | null;
   };
 }

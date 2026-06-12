@@ -38,6 +38,7 @@ import {
   saveReviewSelection,
   saveReviewSelectedSlotIds,
   saveReviewLastImportedPackageId,
+  saveReviewDiff,
 } from '@/utils/storage';
 import {
   computeReviewDiff,
@@ -320,7 +321,7 @@ export const useStore = create<AppState>((set, get) => {
     reviewState: {
       enabled: false,
       selection: persisted.reviewState?.selection ?? null,
-      diff: null,
+      diff: persisted.reviewState?.diff ?? null,
       selectedSlotIds: persisted.reviewState?.selectedSlotIds ?? [],
       importPreview: null,
       undoSnapshot: null,
@@ -917,6 +918,7 @@ export const useStore = create<AppState>((set, get) => {
         reviewState: { ...state.reviewState, selection, diff: null },
       }));
       saveReviewSelection(selection);
+      saveReviewDiff(null);
     },
 
     computeReviewDiff: () => {
@@ -930,6 +932,7 @@ export const useStore = create<AppState>((set, get) => {
       set((state) => ({
         reviewState: { ...state.reviewState, diff },
       }));
+      saveReviewDiff(diff);
 
       const activeSession = get().getActiveSession();
       if (activeSession) {
@@ -960,6 +963,7 @@ export const useStore = create<AppState>((set, get) => {
         reviewState: { ...state.reviewState, diff: null, selectedSlotIds: [] },
       }));
       saveReviewSelectedSlotIds([]);
+      saveReviewDiff(null);
     },
 
     toggleReviewSlotSelection: (slotId) => {
@@ -1175,6 +1179,7 @@ export const useStore = create<AppState>((set, get) => {
       saveReviewSelection(pkg.snapshotSelection);
       saveReviewSelectedSlotIds(pkg.selectedSlotIds);
       saveReviewLastImportedPackageId(pkg.id);
+      saveReviewDiff(pkg.diff);
 
       if (activeSession) {
         const metadata = {
@@ -1233,6 +1238,7 @@ export const useStore = create<AppState>((set, get) => {
       saveReviewSelection(undoSnapshot.selection);
       saveReviewSelectedSlotIds(undoSnapshot.selectedSlotIds);
       saveReviewLastImportedPackageId(null);
+      saveReviewDiff(undoSnapshot.diff);
 
       if (activeSession && pkgId) {
         const metadata = { packageId: pkgId };
@@ -1261,6 +1267,7 @@ export const useStore = create<AppState>((set, get) => {
           selection: persisted.reviewState?.selection ?? state.reviewState.selection,
           selectedSlotIds: persisted.reviewState?.selectedSlotIds ?? state.reviewState.selectedSlotIds,
           lastImportedPackageId: persisted.reviewState?.lastImportedPackageId ?? state.reviewState.lastImportedPackageId,
+          diff: persisted.reviewState?.diff ?? state.reviewState.diff,
         },
       }));
     },

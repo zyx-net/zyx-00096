@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { Upload, RotateCcw, Filter, Layers, ChevronLeft, ChevronRight, Download, RefreshCw, Undo2 } from 'lucide-react';
+import { Upload, RotateCcw, Filter, Layers, ChevronLeft, ChevronRight, Download, RefreshCw, Undo2, FileText, ScrollText, Archive } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import type { SlotStatus } from '@/types';
 
@@ -19,7 +19,15 @@ export default function TopToolbar() {
     undoSnapshot,
     undoLastImport,
     previewDraft,
+    setSessionDialogOpen,
+    toggleLogPanel,
+    getActiveSession,
+    isSessionArchived,
+    logPanelOpen,
   } = useStore();
+
+  const activeSession = getActiveSession();
+  const archived = isSessionArchived();
 
   const exportCount = getExportCount();
 
@@ -139,6 +147,46 @@ export default function TopToolbar() {
           <RefreshCw size={16} />
           重置样例
         </button>
+
+        {activeSession && (
+          <div className="flex items-center gap-2 px-3 py-1.5 text-sm bg-slate-700/50 rounded-md">
+            {archived ? (
+              <Archive size={14} className="text-slate-400" />
+            ) : (
+              <FileText size={14} className="text-blue-400" />
+            )}
+            <span className="text-slate-300">{activeSession.name}</span>
+            {archived && (
+              <span className="px-1.5 py-0.5 text-xs bg-slate-600/50 text-slate-400 rounded">
+                已归档
+              </span>
+            )}
+          </div>
+        )}
+
+        <button
+          onClick={() => setSessionDialogOpen(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-indigo-600 hover:bg-indigo-500 text-white rounded-md transition-colors"
+          title="复核会话管理"
+        >
+          <FileText size={16} />
+          会话
+        </button>
+
+        <button
+          onClick={toggleLogPanel}
+          className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md transition-colors ${
+            logPanelOpen
+              ? 'bg-cyan-600 text-white'
+              : 'bg-slate-700 hover:bg-slate-600 text-white'
+          }`}
+          title="复核日志"
+        >
+          <ScrollText size={16} />
+          日志
+        </button>
+
+        <div className="h-6 w-px bg-slate-700" />
 
         <button
           onClick={handleResetCamera}

@@ -10,6 +10,10 @@ import type {
   ImportPreviewDraft,
   UndoSnapshot,
   ImportDiffSummary,
+  ReviewSession,
+  ReviewLogEntry,
+  RestoreConflict,
+  LogActionType,
 } from '@/types';
 import sampleData from '@/data/sampleWarehouse.json';
 import { detectConflicts, validateLayout } from '@/utils/conflict';
@@ -24,6 +28,11 @@ import {
   savePreviewDraft,
   saveUndoSnapshot,
   saveCurrentBatchId,
+  saveActiveSessionId,
+  loadAllSessions,
+  saveSession,
+  deleteSession,
+  getSession,
 } from '@/utils/storage';
 
 function generateBatchId(): string {
@@ -74,6 +83,15 @@ interface AppState {
   previewDraft: ImportPreviewDraft | null;
   undoSnapshot: UndoSnapshot | null;
   currentBatchId: string | null;
+  activeSessionId: string | null;
+  sessions: ReviewSession[];
+  sessionDialogOpen: boolean;
+  conflictRestoreDialog: {
+    open: boolean;
+    session: ReviewSession | null;
+    conflicts: RestoreConflict | null;
+  } | null;
+  logPanelOpen: boolean;
 
   setLayout: (layout: WarehouseLayout) => void;
   prepareImportPreview: (file: File) => Promise<void>;
@@ -85,6 +103,7 @@ interface AppState {
   setFilters: (filters: Filters) => void;
   setSelectedSlotId: (id: string | null) => void;
   confirmConflict: (conflictId: string) => void;
+  unconfirmConflict: (conflictId: string) => void;
   setPlaybackIndex: (index: number) => void;
   setPlaybackPlaying: (playing: boolean) => void;
   getCurrentPallets: () => Pallet[];
@@ -96,13 +115,86 @@ interface AppState {
   toggleRightPanel: () => void;
   getExportCount: () => number;
   incrementExport: () => number;
+  createSession: (name: string) => void;
+  updateActiveSession: () => void;
+  renameSession: (sessionId: string, newName: string) => void;
+  archiveSession: (sessionId: string) => void;
+  unarchiveSession: (sessionId: string) => void;
+  deleteSession: (sessionId: string) => void;
+  restoreSession: (sessionId: string, mode: 'full' | 'view_only') => void;
+  refreshSessions: () => void;
+  setSessionDialogOpen: (open: boolean) => void;
+  setConflictRestoreDialog: (value: AppState['conflictRestoreDialog']) => void;
+  setLogPanelOpen: (open: boolean) => void;
+  toggleLogPanel: () => void;
+  getActiveSession: () => ReviewSession | undefined;
+  getSessionUnconfirmedCount: (session: ReviewSession) => number;
+  isSessionArchived: () => boolean;
+  _restoreSessionInternal: (session: ReviewSession, mode: 'full' | 'view_only', conflicts: RestoreConflict) => void;
 }
 
 const initialLayout = sampleData as unknown as WarehouseLayout;
 
+function generateSessionId(): string {
+  const rand = Math.random().toString(36).slice(2, 8);
+  return `s-${Date.now().toString(36)}-${rand}`;
+}
+
+function generateLogId(): string {
+  return `log-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function createLogEntry(sessionId: string, action: LogActionType, description: string, metadata?: Record<string, unknown>): ReviewLogEntry {
+  return {
+    id: generateLogId(),
+    sessionId,
+    action,
+    description,
+    timestamp: new Date().toISOString(),
+    metadata,
+  };
+}
+
+function detectRestoreConflicts(session: ReviewSession, currentLayout: WarehouseLayout): RestoreConflict {
+  const currentSlotSet = new Set(currentLayout.slots.map((s) => s.id));
+  const currentPalletSet = new Set(currentLayout.pallets.map((p) => p.id));
+  const sessionSlotSet = new Set(session.slotIds);
+  const sessionPalletSet = new Set(session.palletIds);
+
+  const missingSlotIds: string[] = [];
+  const missingPalletIds: string[] = [];
+  const extraSlotIds: string[] = [];
+  const extraPalletIds: string[] = [];
+
+  session.slotIds.forEach((id) => {
+    if (!currentSlotSet.has(id)) missingSlotIds.push(id);
+  });
+  session.palletIds.forEach((id) => {
+    if (!currentPalletSet.has(id)) missingPalletIds.push(id);
+  });
+  currentLayout.slots.forEach((s) => {
+    if (!sessionSlotSet.has(s.id)) extraSlotIds.push(s.id);
+  });
+  currentLayout.pallets.forEach((p) => {
+    if (!sessionPalletSet.has(p.id)) extraPalletIds.push(p.id);
+  });
+
+  return { missingSlotIds, missingPalletIds, extraSlotIds, extraPalletIds };
+}
+
+function hasRestoreConflicts(conflicts: RestoreConflict): boolean {
+  return (
+    conflicts.missingSlotIds.length > 0 ||
+    conflicts.missingPalletIds.length > 0 ||
+    conflicts.extraSlotIds.length > 0 ||
+    conflicts.extraPalletIds.length > 0
+  );
+}
+
 export const useStore = create<AppState>((set, get) => {
   const persisted = loadPersistedState();
   const initialConflicts = detectConflicts(initialLayout);
+  const initialSessions = loadAllSessions();
 
   const conflictsWithPersistedConfirm = initialConflicts.map((c) => ({
     ...c,
@@ -123,6 +215,11 @@ export const useStore = create<AppState>((set, get) => {
     previewDraft: persisted.previewDraft ?? null,
     undoSnapshot: persisted.undoSnapshot ?? null,
     currentBatchId: persisted.currentBatchId ?? null,
+    activeSessionId: persisted.activeSessionId ?? null,
+    sessions: initialSessions,
+    sessionDialogOpen: false,
+    conflictRestoreDialog: null,
+    logPanelOpen: false,
 
     setLayout: (layout) => {
       const newConflicts = detectConflicts(layout);
@@ -277,6 +374,19 @@ export const useStore = create<AppState>((set, get) => {
       saveConfirmedConflicts([]);
       savePlaybackIndex(-1);
       saveSelectedSlotId(null);
+      set({ activeSessionId: null });
+      saveActiveSessionId(null);
+
+      const activeSession = get().getActiveSession();
+      if (activeSession) {
+        const log = createLogEntry(activeSession.id, 'apply_import', `应用导入布局：${draft.summary.name}`, {
+          batchId: draft.batchId,
+          layoutName: draft.summary.name,
+        });
+        activeSession.logs.push(log);
+        activeSession.lastOpenedAt = new Date().toISOString();
+        saveSession(activeSession);
+      }
 
       get().addToast({ type: 'success', message: `布局已应用：${draft.summary.name}` });
     },
@@ -294,6 +404,7 @@ export const useStore = create<AppState>((set, get) => {
         selectedSlotId: snap.selectedSlotId,
         undoSnapshot: null,
         currentBatchId: null,
+        activeSessionId: null,
       });
 
       saveUndoSnapshot(null);
@@ -302,7 +413,19 @@ export const useStore = create<AppState>((set, get) => {
       saveConfirmedConflicts(snap.confirmedConflicts);
       savePlaybackIndex(snap.playbackIndex);
       saveSelectedSlotId(snap.selectedSlotId);
+      saveActiveSessionId(null);
       if (snap.cameraState) saveCameraState(snap.cameraState);
+
+      const activeSession = get().getActiveSession();
+      if (activeSession) {
+        const log = createLogEntry(activeSession.id, 'undo_import', `撤销导入，恢复至：${snap.importedLayoutName}`, {
+          batchId: snap.batchId,
+          layoutName: snap.importedLayoutName,
+        });
+        activeSession.logs.push(log);
+        activeSession.lastOpenedAt = new Date().toISOString();
+        saveSession(activeSession);
+      }
 
       get().addToast({ type: 'success', message: `已撤销导入，恢复至导入前状态` });
     },
@@ -345,6 +468,11 @@ export const useStore = create<AppState>((set, get) => {
     },
 
     confirmConflict: (conflictId) => {
+      if (get().isSessionArchived()) {
+        get().addToast({ type: 'warning', message: '会话已归档，无法确认异常' });
+        return;
+      }
+      const conflict = get().conflicts.find((c) => c.id === conflictId);
       set((state) => {
         const newConflicts = state.conflicts.map((c) =>
           c.id === conflictId
@@ -355,9 +483,53 @@ export const useStore = create<AppState>((set, get) => {
         saveConfirmedConflicts(confirmedIds);
         return { conflicts: newConflicts };
       });
+      const activeSession = get().getActiveSession();
+      if (activeSession && conflict) {
+        const log = createLogEntry(activeSession.id, 'confirm_conflict', `确认异常：${conflict.description}`, {
+          conflictId,
+          conflictType: conflict.type,
+        });
+        activeSession.logs.push(log);
+        activeSession.confirmedConflictIds.push(conflictId);
+        activeSession.lastOpenedAt = new Date().toISOString();
+        saveSession(activeSession);
+        get().refreshSessions();
+      }
       get().addToast({
         type: 'success',
         message: '冲突已确认',
+      });
+    },
+
+    unconfirmConflict: (conflictId) => {
+      if (get().isSessionArchived()) {
+        get().addToast({ type: 'warning', message: '会话已归档，无法撤销确认' });
+        return;
+      }
+      const conflict = get().conflicts.find((c) => c.id === conflictId);
+      set((state) => {
+        const newConflicts = state.conflicts.map((c) =>
+          c.id === conflictId ? { ...c, confirmed: false, confirmedAt: undefined, confirmedBy: undefined } : c
+        );
+        const confirmedIds = newConflicts.filter((c) => c.confirmed).map((c) => c.id);
+        saveConfirmedConflicts(confirmedIds);
+        return { conflicts: newConflicts };
+      });
+      const activeSession = get().getActiveSession();
+      if (activeSession && conflict) {
+        const log = createLogEntry(activeSession.id, 'unconfirm_conflict', `撤销确认：${conflict.description}`, {
+          conflictId,
+          conflictType: conflict.type,
+        });
+        activeSession.logs.push(log);
+        activeSession.confirmedConflictIds = activeSession.confirmedConflictIds.filter((id) => id !== conflictId);
+        activeSession.lastOpenedAt = new Date().toISOString();
+        saveSession(activeSession);
+        get().refreshSessions();
+      }
+      get().addToast({
+        type: 'info',
+        message: '已撤销确认',
       });
     },
 
@@ -413,7 +585,252 @@ export const useStore = create<AppState>((set, get) => {
     },
 
     incrementExport: () => {
-      return incrementExportCount();
+      const activeSession = get().getActiveSession();
+      const count = incrementExportCount();
+      if (activeSession) {
+        const log = createLogEntry(activeSession.id, 'export_csv', '导出CSV文件', { exportCount: count });
+        activeSession.logs.push(log);
+        activeSession.lastOpenedAt = new Date().toISOString();
+        saveSession(activeSession);
+        get().refreshSessions();
+      }
+      return count;
+    },
+
+    createSession: (name) => {
+      const state = get();
+      const sessionId = generateSessionId();
+      const now = new Date().toISOString();
+      const confirmedIds = state.conflicts.filter((c) => c.confirmed).map((c) => c.id);
+
+      const session: ReviewSession = {
+        id: sessionId,
+        name,
+        status: 'active',
+        createdAt: now,
+        lastOpenedAt: now,
+        layoutName: state.layout.name,
+        conflicts: state.conflicts.map((c) => ({ ...c })),
+        confirmedConflictIds: confirmedIds,
+        filters: { ...state.filters },
+        selectedSlotId: state.selectedSlotId,
+        cameraState: state.cameraState,
+        playbackIndex: state.currentPlaybackIndex,
+        slotIds: state.layout.slots.map((s) => s.id),
+        palletIds: state.layout.pallets.map((p) => p.id),
+        logs: [],
+      };
+
+      const log = createLogEntry(sessionId, 'create_session', `创建复核会话：${name}`);
+      session.logs.push(log);
+
+      saveSession(session);
+      set({ activeSessionId: sessionId, sessions: [...state.sessions, session] });
+      saveActiveSessionId(sessionId);
+
+      state.addToast({ type: 'success', message: `会话已创建：${name}` });
+    },
+
+    updateActiveSession: () => {
+      const state = get();
+      const session = state.getActiveSession();
+      if (!session || session.status === 'archived') return;
+
+      const confirmedIds = state.conflicts.filter((c) => c.confirmed).map((c) => c.id);
+
+      session.conflicts = state.conflicts.map((c) => ({ ...c }));
+      session.confirmedConflictIds = confirmedIds;
+      session.filters = { ...state.filters };
+      session.selectedSlotId = state.selectedSlotId;
+      session.cameraState = state.cameraState;
+      session.playbackIndex = state.currentPlaybackIndex;
+      session.slotIds = state.layout.slots.map((s) => s.id);
+      session.palletIds = state.layout.pallets.map((p) => p.id);
+      session.lastOpenedAt = new Date().toISOString();
+
+      saveSession(session);
+      state.refreshSessions();
+    },
+
+    renameSession: (sessionId, newName) => {
+      const state = get();
+      const session = getSession(sessionId);
+      if (!session) return;
+
+      const oldName = session.name;
+      session.name = newName;
+      session.lastOpenedAt = new Date().toISOString();
+
+      const log = createLogEntry(sessionId, 'rename_session', `重命名：${oldName} → ${newName}`, {
+        oldName,
+        newName,
+      });
+      session.logs.push(log);
+
+      saveSession(session);
+      state.refreshSessions();
+
+      state.addToast({ type: 'success', message: `会话已重命名` });
+    },
+
+    archiveSession: (sessionId) => {
+      const state = get();
+      const session = getSession(sessionId);
+      if (!session) return;
+
+      session.status = 'archived';
+      session.lastOpenedAt = new Date().toISOString();
+
+      const log = createLogEntry(sessionId, 'archive_session', `归档会话：${session.name}`);
+      session.logs.push(log);
+
+      saveSession(session);
+      state.refreshSessions();
+
+      state.addToast({ type: 'success', message: `会话已归档：${session.name}` });
+    },
+
+    unarchiveSession: (sessionId) => {
+      const state = get();
+      const session = getSession(sessionId);
+      if (!session) return;
+
+      session.status = 'active';
+      session.lastOpenedAt = new Date().toISOString();
+
+      const log = createLogEntry(sessionId, 'unarchive_session', `取消归档：${session.name}`);
+      session.logs.push(log);
+
+      saveSession(session);
+      state.refreshSessions();
+
+      state.addToast({ type: 'success', message: `会话已恢复为活动状态` });
+    },
+
+    deleteSession: (sessionId) => {
+      const state = get();
+      const session = getSession(sessionId);
+      deleteSession(sessionId);
+
+      if (state.activeSessionId === sessionId) {
+        set({ activeSessionId: null });
+        saveActiveSessionId(null);
+      }
+
+      state.refreshSessions();
+      state.addToast({ type: 'info', message: `会话已删除：${session?.name ?? sessionId}` });
+    },
+
+    restoreSession: (sessionId, mode) => {
+      const state = get();
+      const session = getSession(sessionId);
+      if (!session) return;
+
+      const conflicts = detectRestoreConflicts(session, state.layout);
+
+      if (mode === 'full' && hasRestoreConflicts(conflicts)) {
+        set({
+          conflictRestoreDialog: {
+            open: true,
+            session,
+            conflicts,
+          },
+        });
+        return;
+      }
+
+      state._restoreSessionInternal(session, mode, conflicts);
+    },
+
+    _restoreSessionInternal: (session, mode, conflicts) => {
+      const state = get();
+
+      if (mode === 'full' && hasRestoreConflicts(conflicts)) {
+        state.addToast({
+          type: 'warning',
+          message: '布局不匹配，仅恢复视角和筛选条件',
+        });
+        mode = 'view_only';
+      }
+
+      if (mode === 'full' && session.status === 'archived') {
+        session.status = 'active';
+        const unarchiveLog = createLogEntry(session.id, 'unarchive_session', `恢复会话时自动取消归档：${session.name}`);
+        session.logs.push(unarchiveLog);
+      }
+
+      if (mode === 'view_only') {
+        set({
+          filters: session.filters,
+          cameraState: session.cameraState,
+          activeSessionId: session.id,
+        });
+        saveFilters(session.filters);
+        if (session.cameraState) saveCameraState(session.cameraState);
+      } else {
+        const restoredConflicts = session.conflicts.map((c) => ({ ...c }));
+        set({
+          conflicts: restoredConflicts,
+          filters: session.filters,
+          selectedSlotId: session.selectedSlotId,
+          currentPlaybackIndex: session.playbackIndex,
+          cameraState: session.cameraState,
+          activeSessionId: session.id,
+        });
+        const confirmedIds = session.confirmedConflictIds;
+        saveConfirmedConflicts(confirmedIds);
+        saveFilters(session.filters);
+        saveSelectedSlotId(session.selectedSlotId);
+        savePlaybackIndex(session.playbackIndex);
+        if (session.cameraState) saveCameraState(session.cameraState);
+      }
+
+      saveActiveSessionId(session.id);
+
+      session.lastOpenedAt = new Date().toISOString();
+      const log = createLogEntry(session.id, 'restore_session', `恢复会话：${session.name}`, {
+        restoreMode: mode,
+      });
+      session.logs.push(log);
+      saveSession(session);
+      state.refreshSessions();
+
+      state.addToast({ type: 'success', message: `已恢复会话：${session.name}` });
+    },
+
+    refreshSessions: () => {
+      set({ sessions: loadAllSessions() });
+    },
+
+    setSessionDialogOpen: (open) => {
+      set({ sessionDialogOpen: open });
+    },
+
+    setConflictRestoreDialog: (value) => {
+      set({ conflictRestoreDialog: value });
+    },
+
+    setLogPanelOpen: (open) => {
+      set({ logPanelOpen: open });
+    },
+
+    toggleLogPanel: () => {
+      set((state) => ({ logPanelOpen: !state.logPanelOpen }));
+    },
+
+    getActiveSession: () => {
+      const state = get();
+      if (!state.activeSessionId) return undefined;
+      return getSession(state.activeSessionId);
+    },
+
+    getSessionUnconfirmedCount: (session) => {
+      return session.conflicts.length - session.confirmedConflictIds.length;
+    },
+
+    isSessionArchived: () => {
+      const session = get().getActiveSession();
+      return session?.status === 'archived';
     },
   };
 });

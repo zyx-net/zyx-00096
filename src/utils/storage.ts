@@ -1,4 +1,4 @@
-import type { PersistedState, CameraState, Filters, ImportPreviewDraft, UndoSnapshot } from '@/types';
+import type { PersistedState, CameraState, Filters, ImportPreviewDraft, UndoSnapshot, ReviewSession } from '@/types';
 
 const STORAGE_KEY = 'warehouse_inspection_state';
 
@@ -30,6 +30,7 @@ export function loadPersistedState(): PersistedState {
       previewDraft: parsed.previewDraft ?? null,
       undoSnapshot: parsed.undoSnapshot ?? null,
       currentBatchId: parsed.currentBatchId ?? null,
+      activeSessionId: parsed.activeSessionId ?? null,
     };
   } catch {
     return { ...defaultState };
@@ -106,4 +107,54 @@ export function saveCurrentBatchId(batchId: string | null): void {
   const state = loadPersistedState();
   state.currentBatchId = batchId;
   savePersistedState(state);
+}
+
+export function saveActiveSessionId(sessionId: string | null): void {
+  const state = loadPersistedState();
+  state.activeSessionId = sessionId;
+  savePersistedState(state);
+}
+
+const SESSIONS_KEY = 'warehouse_inspection_sessions';
+
+export function loadAllSessions(): ReviewSession[] {
+  try {
+    const raw = localStorage.getItem(SESSIONS_KEY);
+    if (!raw) return [];
+    return JSON.parse(raw) as ReviewSession[];
+  } catch {
+    return [];
+  }
+}
+
+export function saveAllSessions(sessions: ReviewSession[]): void {
+  try {
+    localStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions));
+  } catch {
+    // ignore
+  }
+}
+
+export function saveSession(session: ReviewSession): void {
+  const sessions = loadAllSessions();
+  const index = sessions.findIndex((s) => s.id === session.id);
+  if (index >= 0) {
+    sessions[index] = session;
+  } else {
+    sessions.push(session);
+  }
+  saveAllSessions(sessions);
+}
+
+export function deleteSession(sessionId: string): void {
+  const sessions = loadAllSessions().filter((s) => s.id !== sessionId);
+  saveAllSessions(sessions);
+}
+
+export function getSession(sessionId: string): ReviewSession | undefined {
+  return loadAllSessions().find((s) => s.id === sessionId);
+}
+
+export function clearAllSessions(): void {
+  localStorage.removeItem(SESSIONS_KEY);
 }

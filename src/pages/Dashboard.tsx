@@ -6,10 +6,13 @@ import RightPanel from '@/components/panels/RightPanel';
 import BottomTimeline from '@/components/layout/BottomTimeline';
 import ToastContainer from '@/components/common/ToastContainer';
 import Legend from '@/components/common/Legend';
+import SessionManagerDialog from '@/components/dialogs/SessionManagerDialog';
+import ConflictRestoreDialog from '@/components/dialogs/ConflictRestoreDialog';
+import ReviewLogPanel from '@/components/panels/ReviewLogPanel';
 import { useStore } from '@/store/useStore';
 
 export default function Dashboard() {
-  const { loadSampleData, conflicts, addToast } = useStore();
+  const { loadSampleData, conflicts, addToast, sessionDialogOpen, setSessionDialogOpen } = useStore();
 
   useEffect(() => {
     const hasEmptyDataset = conflicts.some((c) => c.type === 'empty_dataset');
@@ -37,6 +40,13 @@ export default function Dashboard() {
       <BottomTimeline />
       <Legend />
       <ToastContainer />
+      <ReviewLogPanel />
+
+      <SessionManagerDialog
+        open={sessionDialogOpen}
+        onClose={() => setSessionDialogOpen(false)}
+      />
+      <ConflictRestoreDialog />
     </div>
   );
 }

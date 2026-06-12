@@ -130,3 +130,66 @@ export interface Toast {
   type: ToastType;
   message: string;
 }
+
+export type ReviewSessionStatus = 'active' | 'archived';
+
+export type LogActionType =
+  | 'confirm_conflict'
+  | 'unconfirm_conflict'
+  | 'apply_import'
+  | 'undo_import'
+  | 'restore_session'
+  | 'create_session'
+  | 'rename_session'
+  | 'archive_session'
+  | 'unarchive_session'
+  | 'export_csv';
+
+export interface ReviewLogEntry {
+  id: string;
+  sessionId: string;
+  action: LogActionType;
+  description: string;
+  timestamp: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ReviewSession {
+  id: string;
+  name: string;
+  status: ReviewSessionStatus;
+  createdAt: string;
+  lastOpenedAt: string;
+  layoutName: string;
+  conflicts: Conflict[];
+  confirmedConflictIds: string[];
+  filters: Filters;
+  selectedSlotId: string | null;
+  cameraState?: CameraState;
+  playbackIndex: number;
+  slotIds: string[];
+  palletIds: string[];
+  logs: ReviewLogEntry[];
+}
+
+export interface RestoreConflict {
+  missingSlotIds: string[];
+  missingPalletIds: string[];
+  extraSlotIds: string[];
+  extraPalletIds: string[];
+}
+
+export type RestoreMode = 'full' | 'view_only';
+
+export interface PersistedState {
+  filters: Filters;
+  confirmedConflicts: string[];
+  currentPlaybackIndex: number;
+  exportCount: number;
+  cameraState?: CameraState;
+  selectedSlotId: string | null;
+  previewDraft?: ImportPreviewDraft | null;
+  undoSnapshot?: UndoSnapshot | null;
+  currentBatchId?: string | null;
+  activeSessionId?: string | null;
+}

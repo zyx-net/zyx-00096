@@ -1,4 +1,4 @@
-import type { Conflict } from '@/types';
+import type { Conflict, ReviewLogEntry, ReviewSession, LogActionType } from '@/types';
 import { getConflictTypeLabel } from './conflict';
 
 interface BatchInfo {
@@ -47,4 +47,51 @@ export function formatTimestamp(date?: Date | string): string {
   const d = typeof date === 'string' ? new Date(date) : date;
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+function getLogActionLabel(action: LogActionType): string {
+  const map: Record<LogActionType, string> = {
+    confirm_conflict: '确认异常',
+    unconfirm_conflict: '撤销确认',
+    apply_import: '导入应用',
+    undo_import: '撤销导入',
+    restore_session: '会话恢复',
+    create_session: '创建会话',
+    rename_session: '重命名会话',
+    archive_session: '归档会话',
+    unarchive_session: '取消归档',
+    export_csv: '导出CSV',
+  };
+  return map[action] || action;
+}
+
+export function exportLogsToCSV(logs: ReviewLogEntry[], session?: ReviewSession | null): string {
+  const headers = ['序号', '时间', '操作类型', '操作描述', '会话ID', '会话名称', '元数据'];
+  const rows = logs.map((log, index) => [
+    index + 1,
+    formatTimestamp(log.timestamp),
+    getLogActionLabel(log.action),
+    log.description,
+    log.sessionId,
+    session?.name || '-',
+    log.metadata ? JSON.stringify(log.metadata) : '-',
+  ]);
+
+  const csvContent = [headers, ...rows]
+    .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+    .join('\n');
+
+  return '\uFEFF' + csvContent;
+}
+
+export function exportSessionToCSV(session: ReviewSession): { conflictsCSV: string; logsCSV: string } {
+  const batchInfo = {
+    batchId: session.id,
+    batchName: session.name,
+    isPreview: false,
+    batchCreatedAt: session.createdAt,
+  };
+  const conflictsCSV = exportConflictsToCSV(session.conflicts, batchInfo);
+  const logsCSV = exportLogsToCSV(session.logs, session);
+  return { conflictsCSV, logsCSV };
 }

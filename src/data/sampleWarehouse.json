@@ -1,0 +1,152 @@
+{
+  "version": "1.0.0",
+  "name": "样例仓库 - A库区",
+  "shelves": [
+    {
+      "id": "shelf-a",
+      "name": "A货架",
+      "position": { "x": -6, "z": 0 },
+      "rows": 1,
+      "columns": 5,
+      "levels": 3
+    },
+    {
+      "id": "shelf-b",
+      "name": "B货架",
+      "position": { "x": 0, "z": 0 },
+      "rows": 1,
+      "columns": 5,
+      "levels": 3
+    },
+    {
+      "id": "shelf-c",
+      "name": "C货架",
+      "position": { "x": 6, "z": 0 },
+      "rows": 1,
+      "columns": 5,
+      "levels": 3
+    }
+  ],
+  "slots": [
+    { "id": "A-01-1", "shelfId": "shelf-a", "row": 0, "column": 0, "level": 0, "status": "occupied" },
+    { "id": "A-02-1", "shelfId": "shelf-a", "row": 0, "column": 1, "level": 0, "status": "occupied" },
+    { "id": "A-03-1", "shelfId": "shelf-a", "row": 0, "column": 2, "level": 0, "status": "empty" },
+    { "id": "A-04-1", "shelfId": "shelf-a", "row": 0, "column": 3, "level": 0, "status": "occupied" },
+    { "id": "A-05-1", "shelfId": "shelf-a", "row": 0, "column": 4, "level": 0, "status": "occupied" },
+    { "id": "A-01-2", "shelfId": "shelf-a", "row": 0, "column": 0, "level": 1, "status": "occupied" },
+    { "id": "A-02-2", "shelfId": "shelf-a", "row": 0, "column": 1, "level": 1, "status": "empty" },
+    { "id": "A-03-2", "shelfId": "shelf-a", "row": 0, "column": 2, "level": 1, "status": "occupied" },
+    { "id": "A-04-2", "shelfId": "shelf-a", "row": 0, "column": 3, "level": 1, "status": "occupied" },
+    { "id": "A-05-2", "shelfId": "shelf-a", "row": 0, "column": 4, "level": 1, "status": "empty" },
+    { "id": "A-01-3", "shelfId": "shelf-a", "row": 0, "column": 0, "level": 2, "status": "empty" },
+    { "id": "A-02-3", "shelfId": "shelf-a", "row": 0, "column": 1, "level": 2, "status": "occupied" },
+    { "id": "A-03-3", "shelfId": "shelf-a", "row": 0, "column": 2, "level": 2, "status": "occupied" },
+    { "id": "A-04-3", "shelfId": "shelf-a", "row": 0, "column": 3, "level": 2, "status": "empty" },
+    { "id": "A-05-3", "shelfId": "shelf-a", "row": 0, "column": 4, "level": 2, "status": "occupied" },
+
+    { "id": "B-01-1", "shelfId": "shelf-b", "row": 0, "column": 0, "level": 0, "status": "occupied" },
+    { "id": "B-02-1", "shelfId": "shelf-b", "row": 0, "column": 1, "level": 0, "status": "occupied" },
+    { "id": "B-03-1", "shelfId": "shelf-b", "row": 0, "column": 2, "level": 0, "status": "occupied" },
+    { "id": "B-04-1", "shelfId": "shelf-b", "row": 0, "column": 3, "level": 0, "status": "empty" },
+    { "id": "B-05-1", "shelfId": "shelf-b", "row": 0, "column": 4, "level": 0, "status": "occupied" },
+    { "id": "B-01-2", "shelfId": "shelf-b", "row": 0, "column": 0, "level": 1, "status": "empty" },
+    { "id": "B-02-2", "shelfId": "shelf-b", "row": 0, "column": 1, "level": 1, "status": "occupied" },
+    { "id": "B-03-2", "shelfId": "shelf-b", "row": 0, "column": 2, "level": 1, "status": "occupied" },
+    { "id": "B-04-2", "shelfId": "shelf-b", "row": 0, "column": 3, "level": 1, "status": "occupied" },
+    { "id": "B-05-2", "shelfId": "shelf-b", "row": 0, "column": 4, "level": 1, "status": "empty" },
+    { "id": "B-01-3", "shelfId": "shelf-b", "row": 0, "column": 0, "level": 2, "status": "occupied" },
+    { "id": "B-02-3", "shelfId": "shelf-b", "row": 0, "column": 1, "level": 2, "status": "empty" },
+    { "id": "B-03-3", "shelfId": "shelf-b", "row": 0, "column": 2, "level": 2, "status": "occupied" },
+    { "id": "B-04-3", "shelfId": "shelf-b", "row": 0, "column": 3, "level": 2, "status": "occupied" },
+    { "id": "B-05-3", "shelfId": "shelf-b", "row": 0, "column": 4, "level": 2, "status": "occupied" },
+
+    { "id": "C-01-1", "shelfId": "shelf-c", "row": 0, "column": 0, "level": 0, "status": "occupied" },
+    { "id": "C-02-1", "shelfId": "shelf-c", "row": 0, "column": 1, "level": 0, "status": "empty" },
+    { "id": "C-03-1", "shelfId": "shelf-c", "row": 0, "column": 2, "level": 0, "status": "occupied" },
+    { "id": "C-04-1", "shelfId": "shelf-c", "row": 0, "column": 3, "level": 0, "status": "occupied" },
+    { "id": "C-05-1", "shelfId": "shelf-c", "row": 0, "column": 4, "level": 0, "status": "occupied" },
+    { "id": "C-01-2", "shelfId": "shelf-c", "row": 0, "column": 0, "level": 1, "status": "occupied" },
+    { "id": "C-02-2", "shelfId": "shelf-c", "row": 0, "column": 1, "level": 1, "status": "occupied" },
+    { "id": "C-03-2", "shelfId": "shelf-c", "row": 0, "column": 2, "level": 1, "status": "empty" },
+    { "id": "C-04-2", "shelfId": "shelf-c", "row": 0, "column": 3, "level": 1, "status": "occupied" },
+    { "id": "C-05-2", "shelfId": "shelf-c", "row": 0, "column": 4, "level": 1, "status": "occupied" },
+    { "id": "C-01-3", "shelfId": "shelf-c", "row": 0, "column": 0, "level": 2, "status": "empty" },
+    { "id": "C-02-3", "shelfId": "shelf-c", "row": 0, "column": 1, "level": 2, "status": "occupied" },
+    { "id": "C-03-3", "shelfId": "shelf-c", "row": 0, "column": 2, "level": 2, "status": "occupied" },
+    { "id": "C-04-3", "shelfId": "shelf-c", "row": 0, "column": 3, "level": 2, "status": "empty" },
+    { "id": "C-05-3", "shelfId": "shelf-c", "row": 0, "column": 4, "level": 2, "status": "occupied" }
+  ],
+  "pallets": [
+    { "id": "p-001", "palletNo": "PLT-2024-0001", "slotId": "A-01-1", "status": "normal", "sku": "SKU-A001", "quantity": 120, "lastCheckTime": "2024-01-15 09:30:00" },
+    { "id": "p-002", "palletNo": "PLT-2024-0002", "slotId": "A-02-1", "status": "normal", "sku": "SKU-A002", "quantity": 80, "lastCheckTime": "2024-01-15 09:35:00" },
+    { "id": "p-003", "palletNo": "PLT-2024-0003", "slotId": "A-04-1", "status": "damaged", "sku": "SKU-A003", "quantity": 200, "lastCheckTime": "2024-01-15 09:40:00" },
+    { "id": "p-004", "palletNo": "PLT-2024-0004", "slotId": "A-05-1", "status": "normal", "sku": "SKU-A004", "quantity": 150, "lastCheckTime": "2024-01-15 09:45:00" },
+    { "id": "p-005", "palletNo": "PLT-2024-0005", "slotId": "A-01-2", "status": "normal", "sku": "SKU-A005", "quantity": 90, "lastCheckTime": "2024-01-15 10:00:00" },
+    { "id": "p-006", "palletNo": "PLT-2024-0006", "slotId": "A-03-2", "status": "normal", "sku": "SKU-A006", "quantity": 110, "lastCheckTime": "2024-01-15 10:05:00" },
+    { "id": "p-007", "palletNo": "PLT-2024-0007", "slotId": "A-04-2", "status": "expired", "sku": "SKU-A007", "quantity": 60, "lastCheckTime": "2024-01-15 10:10:00" },
+    { "id": "p-008", "palletNo": "PLT-2024-0008", "slotId": "A-02-3", "status": "normal", "sku": "SKU-A008", "quantity": 180, "lastCheckTime": "2024-01-15 10:20:00" },
+    { "id": "p-009", "palletNo": "PLT-2024-0009", "slotId": "A-03-3", "status": "normal", "sku": "SKU-A009", "quantity": 100, "lastCheckTime": "2024-01-15 10:25:00" },
+    { "id": "p-010", "palletNo": "PLT-2024-0010", "slotId": "A-05-3", "status": "normal", "sku": "SKU-A010", "quantity": 75, "lastCheckTime": "2024-01-15 10:30:00" },
+
+    { "id": "p-011", "palletNo": "PLT-2024-0011", "slotId": "B-01-1", "status": "normal", "sku": "SKU-B001", "quantity": 130, "lastCheckTime": "2024-01-15 11:00:00" },
+    { "id": "p-012", "palletNo": "PLT-2024-0012", "slotId": "B-02-1", "status": "normal", "sku": "SKU-B002", "quantity": 140, "lastCheckTime": "2024-01-15 11:05:00" },
+    { "id": "p-013", "palletNo": "PLT-2024-0013", "slotId": "B-03-1", "status": "normal", "sku": "SKU-B003", "quantity": 160, "lastCheckTime": "2024-01-15 11:10:00" },
+    { "id": "p-014", "palletNo": "PLT-2024-0014", "slotId": "B-05-1", "status": "damaged", "sku": "SKU-B004", "quantity": 95, "lastCheckTime": "2024-01-15 11:15:00" },
+    { "id": "p-015", "palletNo": "PLT-2024-0015", "slotId": "B-02-2", "status": "normal", "sku": "SKU-B005", "quantity": 110, "lastCheckTime": "2024-01-15 11:30:00" },
+    { "id": "p-016", "palletNo": "PLT-2024-0016", "slotId": "B-03-2", "status": "normal", "sku": "SKU-B006", "quantity": 125, "lastCheckTime": "2024-01-15 11:35:00" },
+    { "id": "p-017", "palletNo": "PLT-2024-0017", "slotId": "B-04-2", "status": "normal", "sku": "SKU-B007", "quantity": 85, "lastCheckTime": "2024-01-15 11:40:00" },
+    { "id": "p-018", "palletNo": "PLT-2024-0018", "slotId": "B-01-3", "status": "normal", "sku": "SKU-B008", "quantity": 170, "lastCheckTime": "2024-01-15 14:00:00" },
+    { "id": "p-019", "palletNo": "PLT-2024-0019", "slotId": "B-03-3", "status": "expired", "sku": "SKU-B009", "quantity": 50, "lastCheckTime": "2024-01-15 14:05:00" },
+    { "id": "p-020", "palletNo": "PLT-2024-0020", "slotId": "B-04-3", "status": "normal", "sku": "SKU-B010", "quantity": 105, "lastCheckTime": "2024-01-15 14:10:00" },
+    { "id": "p-021", "palletNo": "PLT-2024-0021", "slotId": "B-05-3", "status": "normal", "sku": "SKU-B011", "quantity": 115, "lastCheckTime": "2024-01-15 14:15:00" },
+
+    { "id": "p-022", "palletNo": "PLT-2024-0022", "slotId": "C-01-1", "status": "normal", "sku": "SKU-C001", "quantity": 145, "lastCheckTime": "2024-01-15 15:00:00" },
+    { "id": "p-023", "palletNo": "PLT-2024-0023", "slotId": "C-03-1", "status": "normal", "sku": "SKU-C002", "quantity": 135, "lastCheckTime": "2024-01-15 15:05:00" },
+    { "id": "p-024", "palletNo": "PLT-2024-0024", "slotId": "C-04-1", "status": "normal", "sku": "SKU-C003", "quantity": 95, "lastCheckTime": "2024-01-15 15:10:00" },
+    { "id": "p-025", "palletNo": "PLT-2024-0025", "slotId": "C-05-1", "status": "damaged", "sku": "SKU-C004", "quantity": 70, "lastCheckTime": "2024-01-15 15:15:00" },
+    { "id": "p-026", "palletNo": "PLT-2024-0026", "slotId": "C-01-2", "status": "normal", "sku": "SKU-C005", "quantity": 165, "lastCheckTime": "2024-01-15 15:30:00" },
+    { "id": "p-027", "palletNo": "PLT-2024-0027", "slotId": "C-02-2", "status": "normal", "sku": "SKU-C006", "quantity": 120, "lastCheckTime": "2024-01-15 15:35:00" },
+    { "id": "p-028", "palletNo": "PLT-2024-0028", "slotId": "C-04-2", "status": "normal", "sku": "SKU-C007", "quantity": 180, "lastCheckTime": "2024-01-15 15:40:00" },
+    { "id": "p-029", "palletNo": "PLT-2024-0029", "slotId": "C-05-2", "status": "normal", "sku": "SKU-C008", "quantity": 100, "lastCheckTime": "2024-01-15 15:45:00" },
+    { "id": "p-030", "palletNo": "PLT-2024-0030", "slotId": "C-02-3", "status": "expired", "sku": "SKU-C009", "quantity": 55, "lastCheckTime": "2024-01-15 16:00:00" },
+    { "id": "p-031", "palletNo": "PLT-2024-0031", "slotId": "C-03-3", "status": "normal", "sku": "SKU-C010", "quantity": 140, "lastCheckTime": "2024-01-15 16:05:00" },
+    { "id": "p-032", "palletNo": "PLT-2024-0032", "slotId": "C-05-3", "status": "normal", "sku": "SKU-C011", "quantity": 130, "lastCheckTime": "2024-01-15 16:10:00" },
+
+    { "id": "p-conflict-1", "palletNo": "PLT-2024-C01", "slotId": "B-02-1", "status": "normal", "sku": "SKU-X001", "quantity": 200, "lastCheckTime": "2024-01-15 12:00:00" },
+    { "id": "p-conflict-2", "palletNo": "PLT-2024-0012", "slotId": "C-03-1", "status": "normal", "sku": "SKU-X002", "quantity": 150, "lastCheckTime": "2024-01-15 13:00:00" },
+    { "id": "p-conflict-3", "palletNo": "PLT-2024-U01", "slotId": "UNKNOWN-SLOT-999", "status": "unknown", "sku": "SKU-X003", "quantity": 80, "lastCheckTime": "2024-01-15 13:30:00" }
+  ],
+  "inventoryRecords": [
+    {
+      "id": "rec-001",
+      "timestamp": "2024-01-10 08:00:00",
+      "note": "期初盘点",
+      "pallets": [
+        { "id": "p-001", "palletNo": "PLT-2024-0001", "slotId": "A-01-1", "status": "normal", "sku": "SKU-A001", "quantity": 100, "lastCheckTime": "2024-01-10 08:00:00" },
+        { "id": "p-002", "palletNo": "PLT-2024-0002", "slotId": "A-02-1", "status": "normal", "sku": "SKU-A002", "quantity": 80, "lastCheckTime": "2024-01-10 08:00:00" },
+        { "id": "p-011", "palletNo": "PLT-2024-0011", "slotId": "B-01-1", "status": "normal", "sku": "SKU-B001", "quantity": 130, "lastCheckTime": "2024-01-10 08:00:00" },
+        { "id": "p-022", "palletNo": "PLT-2024-0022", "slotId": "C-01-1", "status": "normal", "sku": "SKU-C001", "quantity": 145, "lastCheckTime": "2024-01-10 08:00:00" }
+      ]
+    },
+    {
+      "id": "rec-002",
+      "timestamp": "2024-01-12 08:00:00",
+      "note": "周中盘点",
+      "pallets": [
+        { "id": "p-001", "palletNo": "PLT-2024-0001", "slotId": "A-01-1", "status": "normal", "sku": "SKU-A001", "quantity": 110, "lastCheckTime": "2024-01-12 08:00:00" },
+        { "id": "p-002", "palletNo": "PLT-2024-0002", "slotId": "A-02-1", "status": "normal", "sku": "SKU-A002", "quantity": 80, "lastCheckTime": "2024-01-12 08:00:00" },
+        { "id": "p-003", "palletNo": "PLT-2024-0003", "slotId": "A-04-1", "status": "normal", "sku": "SKU-A003", "quantity": 200, "lastCheckTime": "2024-01-12 08:00:00" },
+        { "id": "p-011", "palletNo": "PLT-2024-0011", "slotId": "B-01-1", "status": "normal", "sku": "SKU-B001", "quantity": 130, "lastCheckTime": "2024-01-12 08:00:00" },
+        { "id": "p-012", "palletNo": "PLT-2024-0012", "slotId": "B-02-1", "status": "normal", "sku": "SKU-B002", "quantity": 140, "lastCheckTime": "2024-01-12 08:00:00" },
+        { "id": "p-022", "palletNo": "PLT-2024-0022", "slotId": "C-01-1", "status": "normal", "sku": "SKU-C001", "quantity": 145, "lastCheckTime": "2024-01-12 08:00:00" },
+        { "id": "p-023", "palletNo": "PLT-2024-0023", "slotId": "C-03-1", "status": "normal", "sku": "SKU-C002", "quantity": 135, "lastCheckTime": "2024-01-12 08:00:00" }
+      ]
+    },
+    {
+      "id": "rec-003",
+      "timestamp": "2024-01-15 17:00:00",
+      "note": "当前快照",
+      "pallets": []
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   saveAllSessions,
+  loadAllSessions,
   saveFilters,
   saveConfirmedConflicts,
   saveCameraState,
@@ -10,7 +11,7 @@ import {
   saveActiveSessionId,
   savePreviewDraft,
 } from '@/utils/storage';
-import type { ReviewSession, Filters, CameraState } from '@/types';
+import type { ReviewSession, Filters, CameraState, ImportPreviewDraft, UndoSnapshot, WarehouseLayout } from '@/types';
 import { detectConflicts } from '@/utils/conflict';
 import type { AppState } from '@/store/useStore';
 
@@ -82,7 +83,7 @@ describe('复核会话 - 初始化自动恢复', () => {
     vi.clearAllMocks();
   });
 
-  it('场景1: 导入布局后创建会话 - 有 currentBatchId 时不应自动恢复会话', async () => {
+  it('场景1: 导入布局后创建会话 - 有 currentBatchId 时应降级为 view_only（恢复筛选/视角但不覆盖仓库数据）', async () => {
     const { initialLayout } = await loadStoreFresh();
     const session = await createTestSession(initialLayout);
     saveAllSessions([session]);
@@ -96,9 +97,13 @@ describe('复核会话 - 初始化自动恢复', () => {
 
     expect(state.activeSessionId).toBe(session.id);
     expect(state.conflicts[0]?.confirmed).toBe(false);
-    expect(state.filters.statusFilter).toBe('all');
-    expect(state.filters.shelfFilter).toBe('all');
+    expect(state.filters.statusFilter).toBe('conflict');
+    expect(state.filters.shelfFilter).toBe('shelf-a');
     expect(state.selectedSlotId).toBe(null);
+    expect(state.currentPlaybackIndex).toBe(-1);
+    expect(state.cameraState?.position).toEqual({ x: 10, y: 20, z: 30 });
+    const restoredSession = state.getActiveSession();
+    expect(restoredSession?.logs.some((l) => l.action === 'restore_session')).toBe(true);
   });
 
   it('场景2: 刷新自动恢复 - 有活跃会话且无导入时应完整恢复', async () => {
@@ -289,5 +294,120 @@ describe('复核会话 - 初始化自动恢复', () => {
     state.unconfirmConflict(conflictId!);
     state = store2.getState();
     expect(state.toasts.length).toBe(initialToasts + 2);
+  });
+
+  it('场景1b: previewDraft 存在时也走 view_only 降级（恢复筛选/视角不覆盖预览）', async () => {
+    const { initialLayout } = await loadStoreFresh();
+    const session = await createTestSession(initialLayout);
+    const emptyLayout = {
+      version: '0.0.0',
+      name: '预览布局',
+      shelves: [],
+      slots: [],
+      pallets: [],
+      inventoryRecords: [],
+    } as unknown as WarehouseLayout;
+    const draft: ImportPreviewDraft = {
+      batchId: 'preview-batch-001',
+      layout: emptyLayout,
+      validationErrors: [],
+      isParseError: false,
+      summary: {
+        name: '预览布局',
+        shelfCount: 0,
+        slotCount: 0,
+        palletCount: 0,
+        recordCount: 0,
+        diff: { addedSlotIds: [], removedSlotIds: [], overwrittenSlotIds: [], addedPalletIds: [], removedPalletIds: [] },
+        projectedConflicts: [],
+      },
+      createdAt: new Date().toISOString(),
+    };
+    saveAllSessions([session]);
+    savePreviewDraft(draft);
+    saveActiveSessionId(session.id);
+
+    const { useStore: store2 } = await loadStoreFresh();
+    const state = store2.getState();
+
+    expect(state.previewDraft?.batchId).toBe('preview-batch-001');
+    expect(state.conflicts[0]?.confirmed).toBe(false);
+    expect(state.filters.statusFilter).toBe('conflict');
+    expect(state.filters.shelfFilter).toBe('shelf-a');
+    expect(state.selectedSlotId).toBe(null);
+    expect(state.cameraState?.position).toEqual({ x: 10, y: 20, z: 30 });
+  });
+
+  it('场景6: applyImportPreview 应写入 apply_import 日志（先写日志再清空 activeSessionId）', async () => {
+    const { initialLayout } = await loadStoreFresh();
+    const session = await createTestSession(initialLayout);
+    saveAllSessions([session]);
+    saveActiveSessionId(session.id);
+
+    const { useStore: store2 } = await loadStoreFresh();
+    const baseConflicts = detectConflicts(initialLayout as unknown as WarehouseLayout);
+    const emptyLayout = {
+      version: '0.0.0',
+      name: '新导入布局',
+      shelves: [],
+      slots: [],
+      pallets: [],
+      inventoryRecords: [],
+    } as unknown as WarehouseLayout;
+    const draft: ImportPreviewDraft = {
+      batchId: 'apply-batch-001',
+      layout: emptyLayout,
+      validationErrors: [],
+      isParseError: false,
+      summary: {
+        name: '新导入布局',
+        shelfCount: 0,
+        slotCount: 0,
+        palletCount: 0,
+        recordCount: 0,
+        diff: { addedSlotIds: [], removedSlotIds: [], overwrittenSlotIds: [], addedPalletIds: [], removedPalletIds: [] },
+        projectedConflicts: baseConflicts,
+      },
+      createdAt: new Date().toISOString(),
+    };
+    (store2 as unknown as { setState: (p: Partial<AppState>) => void }).setState({ previewDraft: draft });
+    store2.getState().applyImportPreview();
+
+    const state = store2.getState();
+    expect(state.activeSessionId).toBe(null);
+    const stored = loadAllSessions();
+    const updatedSession = stored.find((s) => s.id === session.id);
+    expect(updatedSession?.logs.some((l) => l.action === 'apply_import')).toBe(true);
+    expect(updatedSession?.logs.some((l) => l.description?.includes('新导入布局'))).toBe(true);
+  });
+
+  it('场景7: undoLastImport 应写入 undo_import 日志（先写日志再清空 activeSessionId）', async () => {
+    const { initialLayout } = await loadStoreFresh();
+    const session = await createTestSession(initialLayout);
+    saveAllSessions([session]);
+    saveActiveSessionId(session.id);
+
+    const { useStore: store2 } = await loadStoreFresh();
+    const baseConflicts = detectConflicts(initialLayout as unknown as WarehouseLayout);
+    const snap: UndoSnapshot = {
+      batchId: 'undo-batch-001',
+      importedLayoutName: '撤销目标布局',
+      layout: initialLayout as unknown as WarehouseLayout,
+      conflicts: baseConflicts,
+      confirmedConflicts: [],
+      filters: { statusFilter: 'all', shelfFilter: 'all' },
+      playbackIndex: -1,
+      selectedSlotId: null,
+      createdAt: new Date().toISOString(),
+    };
+    (store2 as unknown as { setState: (p: Partial<AppState>) => void }).setState({ undoSnapshot: snap });
+    store2.getState().undoLastImport();
+
+    const state = store2.getState();
+    expect(state.activeSessionId).toBe(null);
+    const stored = loadAllSessions();
+    const updatedSession = stored.find((s) => s.id === session.id);
+    expect(updatedSession?.logs.some((l) => l.action === 'undo_import')).toBe(true);
+    expect(updatedSession?.logs.some((l) => l.description?.includes('撤销目标布局'))).toBe(true);
   });
 });

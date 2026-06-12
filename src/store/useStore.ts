@@ -248,28 +248,32 @@ export const useStore = create<AppState>((set, get) => {
   }
 
   let initialActiveSession: ReviewSession | null = null;
-  if (persisted.activeSessionId && !persisted.currentBatchId && !persisted.previewDraft) {
+  let initialRestoreMode: 'full' | 'view_only' | null = null;
+  if (persisted.activeSessionId) {
     const session = initialSessions.find((s) => s.id === persisted.activeSessionId);
     if (session && session.status === 'active') {
       const restoreConflicts = detectRestoreConflicts(session, initialLayout);
-      const mode = hasRestoreConflicts(restoreConflicts) ? 'view_only' : 'full';
+      const hasImportState = !!persisted.currentBatchId || !!persisted.previewDraft;
+      const mode: 'full' | 'view_only' =
+        !hasImportState && !hasRestoreConflicts(restoreConflicts) ? 'full' : 'view_only';
       applyRestoreInternal(session, mode, restoreConflicts);
       initialActiveSession = session;
+      initialRestoreMode = mode;
     }
   }
 
+  const canFullRestore = initialActiveSession && initialRestoreMode === 'full';
+
   return {
     layout: initialLayout,
-    conflicts: initialActiveSession && !hasRestoreConflicts(detectRestoreConflicts(initialActiveSession, initialLayout))
-      ? initialActiveSession.conflicts.map((c) => ({ ...c }))
-      : conflictsWithPersistedConfirm,
+    conflicts: canFullRestore
+      ? initialActiveSession!.conflicts.map((c) => ({ ...c }))
+      : initialActiveSession
+        ? initialConflicts
+        : conflictsWithPersistedConfirm,
     filters: initialActiveSession?.filters ?? persisted.filters,
-    selectedSlotId: initialActiveSession && !hasRestoreConflicts(detectRestoreConflicts(initialActiveSession, initialLayout))
-      ? initialActiveSession.selectedSlotId
-      : persisted.selectedSlotId,
-    currentPlaybackIndex: initialActiveSession && !hasRestoreConflicts(detectRestoreConflicts(initialActiveSession, initialLayout))
-      ? initialActiveSession.playbackIndex
-      : persisted.currentPlaybackIndex,
+    selectedSlotId: canFullRestore ? initialActiveSession!.selectedSlotId : persisted.selectedSlotId,
+    currentPlaybackIndex: canFullRestore ? initialActiveSession!.playbackIndex : persisted.currentPlaybackIndex,
     isPlaybackPlaying: false,
     toasts: [],
     cameraState: initialActiveSession?.cameraState ?? persisted.cameraState,
@@ -437,8 +441,6 @@ export const useStore = create<AppState>((set, get) => {
       saveConfirmedConflicts([]);
       savePlaybackIndex(-1);
       saveSelectedSlotId(null);
-      set({ activeSessionId: null });
-      saveActiveSessionId(null);
 
       const activeSession = get().getActiveSession();
       if (activeSession) {
@@ -451,12 +453,26 @@ export const useStore = create<AppState>((set, get) => {
         saveSession(activeSession);
       }
 
+      set({ activeSessionId: null });
+      saveActiveSessionId(null);
+
       get().addToast({ type: 'success', message: `布局已应用：${draft.summary.name}` });
     },
 
     undoLastImport: () => {
       const snap = get().undoSnapshot;
       if (!snap) return;
+
+      const activeSession = get().getActiveSession();
+      if (activeSession) {
+        const log = createLogEntry(activeSession.id, 'undo_import', `撤销导入，恢复至：${snap.importedLayoutName}`, {
+          batchId: snap.batchId,
+          layoutName: snap.importedLayoutName,
+        });
+        activeSession.logs.push(log);
+        activeSession.lastOpenedAt = new Date().toISOString();
+        saveSession(activeSession);
+      }
 
       set({
         layout: snap.layout,
@@ -478,17 +494,6 @@ export const useStore = create<AppState>((set, get) => {
       saveSelectedSlotId(snap.selectedSlotId);
       saveActiveSessionId(null);
       if (snap.cameraState) saveCameraState(snap.cameraState);
-
-      const activeSession = get().getActiveSession();
-      if (activeSession) {
-        const log = createLogEntry(activeSession.id, 'undo_import', `撤销导入，恢复至：${snap.importedLayoutName}`, {
-          batchId: snap.batchId,
-          layoutName: snap.importedLayoutName,
-        });
-        activeSession.logs.push(log);
-        activeSession.lastOpenedAt = new Date().toISOString();
-        saveSession(activeSession);
-      }
 
       get().addToast({ type: 'success', message: `已撤销导入，恢复至导入前状态` });
     },

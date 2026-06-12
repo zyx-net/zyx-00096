@@ -1,4 +1,4 @@
-import { ScrollText, X, CheckCircle, XCircle, Upload, Undo2, FolderOpen, Plus, Edit3, Archive, Download, FileText, FileSpreadsheet, Import, Play, RotateCcw, Eye } from 'lucide-react';
+import { ScrollText, X, CheckCircle, XCircle, Upload, Undo2, FolderOpen, Plus, Edit3, Archive, Download, FileText, FileSpreadsheet, Import, Play, RotateCcw, Eye, MapPin, Send, Trash2 } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import { formatTimestamp } from '@/utils/export';
 import type { LogActionType, ReviewLogEntry } from '@/types';
@@ -20,6 +20,14 @@ const actionLabels: Record<LogActionType, string> = {
   import_review: '导入复盘',
   apply_review: '应用复盘',
   undo_review: '撤销复盘',
+  create_inspection_draft: '创建巡检草稿',
+  update_inspection_draft: '更新巡检草稿',
+  publish_inspection: '发布巡检任务',
+  undo_publish_inspection: '撤销发布巡检',
+  export_inspection_json: '导出巡检JSON',
+  import_inspection: '导入巡检',
+  apply_inspection_import: '应用巡检导入',
+  clear_inspection_draft: '清除巡检草稿',
 };
 
 const actionIcons: Record<LogActionType, typeof CheckCircle> = {
@@ -39,6 +47,14 @@ const actionIcons: Record<LogActionType, typeof CheckCircle> = {
   import_review: Import,
   apply_review: Play,
   undo_review: RotateCcw,
+  create_inspection_draft: Plus,
+  update_inspection_draft: Edit3,
+  publish_inspection: Send,
+  undo_publish_inspection: Undo2,
+  export_inspection_json: FileText,
+  import_inspection: Import,
+  apply_inspection_import: Play,
+  clear_inspection_draft: Trash2,
 };
 
 const actionColors: Record<LogActionType, string> = {
@@ -58,6 +74,14 @@ const actionColors: Record<LogActionType, string> = {
   import_review: 'text-rose-400 bg-rose-900/30',
   apply_review: 'text-violet-400 bg-violet-900/30',
   undo_review: 'text-orange-400 bg-orange-900/30',
+  create_inspection_draft: 'text-emerald-400 bg-emerald-900/30',
+  update_inspection_draft: 'text-blue-400 bg-blue-900/30',
+  publish_inspection: 'text-green-400 bg-green-900/30',
+  undo_publish_inspection: 'text-orange-400 bg-orange-900/30',
+  export_inspection_json: 'text-indigo-400 bg-indigo-900/30',
+  import_inspection: 'text-rose-400 bg-rose-900/30',
+  apply_inspection_import: 'text-violet-400 bg-violet-900/30',
+  clear_inspection_draft: 'text-red-400 bg-red-900/30',
 };
 
 export default function ReviewLogPanel() {

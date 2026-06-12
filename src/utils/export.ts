@@ -67,6 +67,14 @@ function getLogActionLabel(action: LogActionType): string {
     import_review: '导入复盘',
     apply_review: '应用复盘',
     undo_review: '撤销复盘',
+    create_inspection_draft: '创建巡检草稿',
+    update_inspection_draft: '更新巡检草稿',
+    publish_inspection: '发布巡检任务',
+    undo_publish_inspection: '撤销发布巡检',
+    export_inspection_json: '导出巡检JSON',
+    import_inspection: '导入巡检',
+    apply_inspection_import: '应用巡检导入',
+    clear_inspection_draft: '清除巡检草稿',
   };
   return map[action] || action;
 }

@@ -16,6 +16,10 @@ import type {
   LogActionType,
   ReviewSnapshotSelection,
   ReviewState,
+  InspectionState,
+  InspectionTaskPackage,
+  InspectionImportPreview,
+  InspectionUndoSnapshot,
 } from '@/types';
 import sampleData from '@/data/sampleWarehouse.json';
 import { detectConflicts, validateLayout } from '@/utils/conflict';
@@ -39,6 +43,11 @@ import {
   saveReviewSelectedSlotIds,
   saveReviewLastImportedPackageId,
   saveReviewDiff,
+  saveInspectionSelectedSlotIds,
+  saveInspectionDraft,
+  saveInspectionLastPublished,
+  saveInspectionLastImportedPackageId,
+  loadInspectionState,
 } from '@/utils/storage';
 import {
   computeReviewDiff,
@@ -50,6 +59,15 @@ import {
   downloadJSON,
   downloadCSV,
 } from '@/utils/review';
+import {
+  createInspectionPackage,
+  updateInspectionPackage,
+  publishInspectionPackage,
+  exportInspectionToJSON,
+  prepareInspectionImportPreview,
+  isDuplicateInspectionLogEntry,
+  filterSlots,
+} from '@/utils/inspection';
 
 function generateBatchId(): string {
   const rand = Math.random().toString(36).slice(2, 6);
@@ -109,6 +127,7 @@ export interface AppState {
   } | null;
   logPanelOpen: boolean;
   reviewState: ReviewState;
+  inspectionState: InspectionState;
 
   setLayout: (layout: WarehouseLayout) => void;
   prepareImportPreview: (file: File) => Promise<void>;
@@ -162,6 +181,22 @@ export interface AppState {
   applyReviewImport: () => void;
   undoReviewImport: () => void;
   refreshReviewFromStorage: () => void;
+
+  setInspectionEnabled: (enabled: boolean) => void;
+  toggleInspectionSlotSelection: (slotId: string) => void;
+  clearInspectionSlotSelection: () => void;
+  selectAllFilteredSlotsForInspection: () => void;
+  createInspectionDraft: (name?: string, description?: string) => void;
+  updateInspectionDraft: () => void;
+  clearInspectionDraft: () => void;
+  publishInspection: () => void;
+  undoPublishInspection: () => void;
+  exportInspectionJSON: () => void;
+  prepareInspectionImport: (file: File) => Promise<void>;
+  cancelInspectionImport: () => void;
+  applyInspectionImport: (mode: 'overwrite' | 'view_only') => void;
+  refreshInspectionFromStorage: () => void;
+  getFilteredSlotsForInspection: () => string[];
 }
 
 export const initialLayout = sampleData as unknown as WarehouseLayout;
@@ -226,6 +261,7 @@ export const useStore = create<AppState>((set, get) => {
   const persisted = loadPersistedState();
   const initialConflicts = detectConflicts(initialLayout);
   const initialSessions = loadAllSessions();
+  const initialInspectionState = loadInspectionState();
 
   const conflictsWithPersistedConfirm = initialConflicts.map((c) => ({
     ...c,
@@ -326,6 +362,15 @@ export const useStore = create<AppState>((set, get) => {
       importPreview: null,
       undoSnapshot: null,
       lastImportedPackageId: persisted.reviewState?.lastImportedPackageId ?? null,
+    },
+    inspectionState: {
+      enabled: false,
+      selectedSlotIds: initialInspectionState.selectedSlotIds,
+      draft: initialInspectionState.draft,
+      lastPublished: initialInspectionState.lastPublished,
+      importPreview: null,
+      undoSnapshot: null,
+      lastImportedPackageId: initialInspectionState.lastImportedPackageId,
     },
 
     setLayout: (layout) => {
@@ -1268,6 +1313,490 @@ export const useStore = create<AppState>((set, get) => {
           selectedSlotIds: persisted.reviewState?.selectedSlotIds ?? state.reviewState.selectedSlotIds,
           lastImportedPackageId: persisted.reviewState?.lastImportedPackageId ?? state.reviewState.lastImportedPackageId,
           diff: persisted.reviewState?.diff ?? state.reviewState.diff,
+        },
+      }));
+    },
+
+    setInspectionEnabled: (enabled) => {
+      set((state) => ({
+        inspectionState: { ...state.inspectionState, enabled },
+      }));
+      if (!enabled) {
+        get().clearInspectionSlotSelection();
+      }
+    },
+
+    toggleInspectionSlotSelection: (slotId) => {
+      set((state) => {
+        const selected = new Set(state.inspectionState.selectedSlotIds);
+        if (selected.has(slotId)) {
+          selected.delete(slotId);
+        } else {
+          selected.add(slotId);
+        }
+        const selectedSlotIds = Array.from(selected);
+        saveInspectionSelectedSlotIds(selectedSlotIds);
+        return {
+          inspectionState: { ...state.inspectionState, selectedSlotIds },
+        };
+      });
+    },
+
+    clearInspectionSlotSelection: () => {
+      set((state) => ({
+        inspectionState: { ...state.inspectionState, selectedSlotIds: [] },
+      }));
+      saveInspectionSelectedSlotIds([]);
+    },
+
+    getFilteredSlotsForInspection: () => {
+      const state = get();
+      const filtered = filterSlots(state.layout, state.filters);
+      return filtered.map((s) => s.id);
+    },
+
+    selectAllFilteredSlotsForInspection: () => {
+      const state = get();
+      const filteredSlotIds = state.getFilteredSlotsForInspection();
+      set((s) => ({
+        inspectionState: { ...s.inspectionState, selectedSlotIds: filteredSlotIds },
+      }));
+      saveInspectionSelectedSlotIds(filteredSlotIds);
+      state.addToast({ type: 'info', message: `已选择 ${filteredSlotIds.length} 个筛选结果货位` });
+    },
+
+    createInspectionDraft: (name, description) => {
+      const state = get();
+      if (state.inspectionState.selectedSlotIds.length === 0) {
+        state.addToast({ type: 'warning', message: '请先选择要巡检的货位' });
+        return;
+      }
+
+      const pkg = createInspectionPackage(
+        state.layout,
+        state.filters,
+        state.inspectionState.selectedSlotIds,
+        name,
+        description
+      );
+
+      set((s) => ({
+        inspectionState: { ...s.inspectionState, draft: pkg },
+      }));
+      saveInspectionDraft(pkg);
+
+      const activeSession = state.getActiveSession();
+      if (activeSession) {
+        const metadata = {
+          packageId: pkg.id,
+          packageName: pkg.name,
+          slotCount: pkg.selectedSlotIds.length,
+        };
+        if (!isDuplicateInspectionLogEntry(activeSession.logs, 'create_inspection_draft', metadata)) {
+          const log = createLogEntry(
+            activeSession.id,
+            'create_inspection_draft',
+            `创建巡检任务草稿：${pkg.name}`,
+            metadata
+          );
+          activeSession.logs.push(log);
+          saveSession(activeSession);
+          state.refreshSessions();
+        }
+      }
+
+      state.addToast({ type: 'success', message: `巡检草稿已创建：${pkg.name}` });
+    },
+
+    updateInspectionDraft: () => {
+      const state = get();
+      if (!state.inspectionState.draft) {
+        state.addToast({ type: 'warning', message: '没有可更新的巡检草稿' });
+        return;
+      }
+
+      const updatedPkg = updateInspectionPackage(
+        state.inspectionState.draft,
+        state.layout,
+        state.filters,
+        state.inspectionState.selectedSlotIds
+      );
+
+      set((s) => ({
+        inspectionState: { ...s.inspectionState, draft: updatedPkg },
+      }));
+      saveInspectionDraft(updatedPkg);
+
+      const activeSession = state.getActiveSession();
+      if (activeSession) {
+        const metadata = {
+          packageId: updatedPkg.id,
+          packageName: updatedPkg.name,
+          slotCount: updatedPkg.selectedSlotIds.length,
+        };
+        if (!isDuplicateInspectionLogEntry(activeSession.logs, 'update_inspection_draft', metadata)) {
+          const log = createLogEntry(
+            activeSession.id,
+            'update_inspection_draft',
+            `更新巡检任务草稿：${updatedPkg.name}`,
+            metadata
+          );
+          activeSession.logs.push(log);
+          saveSession(activeSession);
+          state.refreshSessions();
+        }
+      }
+
+      state.addToast({ type: 'success', message: `巡检草稿已更新` });
+    },
+
+    clearInspectionDraft: () => {
+      const state = get();
+      const draftName = state.inspectionState.draft?.name;
+
+      set((s) => ({
+        inspectionState: { ...s.inspectionState, draft: null },
+      }));
+      saveInspectionDraft(null);
+
+      const activeSession = state.getActiveSession();
+      if (activeSession && draftName) {
+        const log = createLogEntry(
+          activeSession.id,
+          'clear_inspection_draft',
+          `清除巡检任务草稿：${draftName}`
+        );
+        activeSession.logs.push(log);
+        saveSession(activeSession);
+        state.refreshSessions();
+      }
+
+      state.addToast({ type: 'info', message: '巡检草稿已清除' });
+    },
+
+    publishInspection: () => {
+      const state = get();
+      if (!state.inspectionState.draft) {
+        state.addToast({ type: 'warning', message: '请先创建巡检草稿' });
+        return;
+      }
+
+      const undoSnapshot: InspectionUndoSnapshot = {
+        packageId: state.inspectionState.draft.id,
+        packageName: state.inspectionState.draft.name,
+        previousDraft: state.inspectionState.draft,
+        previousPublished: state.inspectionState.lastPublished,
+        previousSelectedSlotIds: [...state.inspectionState.selectedSlotIds],
+        previousFilters: { ...state.filters },
+        createdAt: new Date().toISOString(),
+      };
+
+      const publishedPkg = publishInspectionPackage(state.inspectionState.draft);
+
+      set((s) => ({
+        inspectionState: {
+          ...s.inspectionState,
+          draft: null,
+          lastPublished: publishedPkg,
+          undoSnapshot,
+          lastImportedPackageId: publishedPkg.id,
+        },
+      }));
+      saveInspectionDraft(null);
+      saveInspectionLastPublished(publishedPkg);
+      saveInspectionLastImportedPackageId(publishedPkg.id);
+
+      const activeSession = state.getActiveSession();
+      if (activeSession) {
+        const metadata = {
+          packageId: publishedPkg.id,
+          packageName: publishedPkg.name,
+          slotCount: publishedPkg.selectedSlotIds.length,
+          totalDistance: publishedPkg.totalDistance,
+        };
+        const log = createLogEntry(
+          activeSession.id,
+          'publish_inspection',
+          `发布巡检任务：${publishedPkg.name}`,
+          metadata
+        );
+        activeSession.logs.push(log);
+        saveSession(activeSession);
+        state.refreshSessions();
+      }
+
+      state.addToast({ type: 'success', message: `巡检任务已发布：${publishedPkg.name}` });
+    },
+
+    undoPublishInspection: () => {
+      const state = get();
+      const undoSnapshot = state.inspectionState.undoSnapshot;
+      if (!undoSnapshot) {
+        state.addToast({ type: 'warning', message: '没有可撤销的发布操作' });
+        return;
+      }
+
+      set((s) => ({
+        inspectionState: {
+          ...s.inspectionState,
+          draft: undoSnapshot.previousDraft,
+          lastPublished: undoSnapshot.previousPublished,
+          selectedSlotIds: [...undoSnapshot.previousSelectedSlotIds],
+          undoSnapshot: null,
+          lastImportedPackageId: undoSnapshot.previousPublished?.id ?? null,
+        },
+        filters: { ...undoSnapshot.previousFilters },
+      }));
+      saveInspectionDraft(undoSnapshot.previousDraft);
+      saveInspectionLastPublished(undoSnapshot.previousPublished);
+      saveInspectionLastImportedPackageId(undoSnapshot.previousPublished?.id ?? null);
+      saveInspectionSelectedSlotIds(undoSnapshot.previousSelectedSlotIds);
+      saveFilters(undoSnapshot.previousFilters);
+
+      const activeSession = state.getActiveSession();
+      if (activeSession) {
+        const metadata = {
+          packageId: undoSnapshot.packageId,
+          packageName: undoSnapshot.packageName,
+        };
+        const log = createLogEntry(
+          activeSession.id,
+          'undo_publish_inspection',
+          `撤销发布巡检任务：${undoSnapshot.packageName}`,
+          metadata
+        );
+        activeSession.logs.push(log);
+        saveSession(activeSession);
+        state.refreshSessions();
+      }
+
+      state.addToast({ type: 'success', message: '已撤销发布，恢复至草稿状态' });
+    },
+
+    exportInspectionJSON: () => {
+      const state = get();
+      const pkg = state.inspectionState.draft || state.inspectionState.lastPublished;
+      if (!pkg) {
+        state.addToast({ type: 'warning', message: '没有可导出的巡检任务' });
+        return;
+      }
+
+      const json = exportInspectionToJSON(pkg);
+      const safeName = pkg.name.replace(/[\\/:*?"<>|]/g, '_');
+      downloadJSON(`巡检任务_${safeName}.json`, json);
+      incrementExportCount();
+
+      const activeSession = state.getActiveSession();
+      if (activeSession) {
+        const metadata = {
+          packageId: pkg.id,
+          packageName: pkg.name,
+          status: pkg.status,
+        };
+        if (!isDuplicateInspectionLogEntry(activeSession.logs, 'export_inspection_json', metadata)) {
+          const log = createLogEntry(
+            activeSession.id,
+            'export_inspection_json',
+            `导出巡检任务JSON：${pkg.name}`,
+            metadata
+          );
+          activeSession.logs.push(log);
+          activeSession.lastOpenedAt = new Date().toISOString();
+          saveSession(activeSession);
+          state.refreshSessions();
+        }
+      }
+
+      state.addToast({ type: 'success', message: '巡检任务已导出' });
+    },
+
+    prepareInspectionImport: async (file) => {
+      const state = get();
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        const preview = prepareInspectionImportPreview(
+          data,
+          state.layout,
+          state.inspectionState.draft,
+          state.inspectionState.lastPublished
+        );
+
+        set((s) => ({
+          inspectionState: { ...s.inspectionState, importPreview: preview },
+        }));
+
+        if (!preview.valid) {
+          state.addToast({ type: 'error', message: `巡检包校验失败：${preview.validationErrors[0]}` });
+          return;
+        }
+
+        if (preview.conflicts.length > 0) {
+          const blockCount = preview.conflicts.filter((c) => c.severity === 'block').length;
+          const warnCount = preview.conflicts.filter((c) => c.severity === 'warn').length;
+          if (blockCount > 0) {
+            state.addToast({
+              type: 'error',
+              message: `巡检包存在${blockCount}项阻断冲突，仅可查看`,
+            });
+          } else if (warnCount > 0) {
+            const hasIdDuplicate = preview.conflicts.some((c) => c.type === 'id_duplicate');
+            if (hasIdDuplicate) {
+              state.addToast({
+                type: 'warning',
+                message: `巡检包存在ID冲突，导入将覆盖现有内容`,
+              });
+            } else {
+              state.addToast({
+                type: 'warning',
+                message: `巡检包存在${warnCount}项警告冲突`,
+              });
+            }
+          } else {
+            state.addToast({ type: 'info', message: `已生成巡检包预览：${preview.package?.name}` });
+          }
+        } else {
+          state.addToast({ type: 'info', message: `已生成巡检包预览：${preview.package?.name}` });
+        }
+      } catch {
+        set((s) => ({
+          inspectionState: {
+            ...s.inspectionState,
+            importPreview: {
+              valid: false,
+              package: null,
+              conflicts: [],
+              validationErrors: ['JSON 解析失败，请检查文件格式'],
+              isParseError: true,
+              canApply: false,
+              applyMode: 'view_only',
+            },
+          },
+        }));
+        state.addToast({ type: 'error', message: '巡检包解析失败' });
+      }
+    },
+
+    cancelInspectionImport: () => {
+      set((state) => ({
+        inspectionState: { ...state.inspectionState, importPreview: null },
+      }));
+      get().addToast({ type: 'info', message: '已取消巡检包导入' });
+    },
+
+    applyInspectionImport: (mode) => {
+      const state = get();
+      const preview = state.inspectionState.importPreview;
+      if (!preview || !preview.valid || !preview.package) {
+        state.addToast({ type: 'error', message: '没有可应用的巡检包' });
+        return;
+      }
+
+      if (!preview.canApply) {
+        state.addToast({ type: 'error', message: '该巡检包存在阻断冲突，无法应用' });
+        return;
+      }
+
+      const pkg = preview.package;
+      const activeSession = state.getActiveSession();
+
+      if (activeSession && state.inspectionState.lastImportedPackageId === pkg.id && mode === 'overwrite') {
+        state.addToast({ type: 'info', message: '该巡检包已应用，无需重复操作' });
+        return;
+      }
+
+      const undoSnapshot: InspectionUndoSnapshot = {
+        packageId: pkg.id,
+        packageName: pkg.name,
+        previousDraft: state.inspectionState.draft,
+        previousPublished: state.inspectionState.lastPublished,
+        previousSelectedSlotIds: [...state.inspectionState.selectedSlotIds],
+        previousFilters: { ...state.filters },
+        createdAt: new Date().toISOString(),
+      };
+
+      let newDraft = state.inspectionState.draft;
+      let newPublished = state.inspectionState.lastPublished;
+      let newSelectedSlotIds = state.inspectionState.selectedSlotIds;
+      let newFilters = state.filters;
+
+      if (mode === 'overwrite') {
+        if (pkg.status === 'draft') {
+          newDraft = pkg;
+          newPublished = state.inspectionState.lastPublished;
+        } else {
+          newDraft = null;
+          newPublished = pkg;
+        }
+        newSelectedSlotIds = [...pkg.selectedSlotIds];
+        newFilters = { ...pkg.filterSnapshot };
+      }
+
+      set((s) => ({
+        inspectionState: {
+          ...s.inspectionState,
+          draft: newDraft,
+          lastPublished: newPublished,
+          selectedSlotIds: newSelectedSlotIds,
+          importPreview: null,
+          undoSnapshot,
+          lastImportedPackageId: pkg.id,
+          enabled: true,
+        },
+        filters: newFilters,
+      }));
+
+      saveInspectionDraft(newDraft);
+      saveInspectionLastPublished(newPublished);
+      saveInspectionLastImportedPackageId(pkg.id);
+      saveInspectionSelectedSlotIds(newSelectedSlotIds);
+      saveFilters(newFilters);
+
+      if (activeSession) {
+        const metadata = {
+          packageId: pkg.id,
+          packageName: pkg.name,
+          applyMode: mode,
+          status: pkg.status,
+        };
+        if (!isDuplicateInspectionLogEntry(activeSession.logs, 'import_inspection', metadata)) {
+          const log1 = createLogEntry(
+            activeSession.id,
+            'import_inspection',
+            `导入巡检包：${pkg.name}`,
+            metadata
+          );
+          activeSession.logs.push(log1);
+        }
+        if (!isDuplicateInspectionLogEntry(activeSession.logs, 'apply_inspection_import', metadata)) {
+          const log2 = createLogEntry(
+            activeSession.id,
+            'apply_inspection_import',
+            `应用巡检包：${pkg.name}（${mode === 'overwrite' ? '覆盖模式' : '只读模式'}）`,
+            metadata
+          );
+          activeSession.logs.push(log2);
+        }
+        activeSession.lastOpenedAt = new Date().toISOString();
+        saveSession(activeSession);
+        state.refreshSessions();
+      }
+
+      state.addToast({
+        type: 'success',
+        message: `巡检包已应用：${pkg.name}（${mode === 'overwrite' ? '覆盖模式' : '只读模式'}）`,
+      });
+    },
+
+    refreshInspectionFromStorage: () => {
+      const persisted = loadInspectionState();
+      set((state) => ({
+        inspectionState: {
+          ...state.inspectionState,
+          selectedSlotIds: persisted.selectedSlotIds,
+          draft: persisted.draft,
+          lastPublished: persisted.lastPublished,
+          lastImportedPackageId: persisted.lastImportedPackageId,
         },
       }));
     },

@@ -1,4 +1,4 @@
-import type { PersistedState, CameraState, Filters, ImportPreviewDraft, UndoSnapshot, ReviewSession, ReviewSnapshotSelection, ReviewDiff } from '@/types';
+import type { PersistedState, CameraState, Filters, ImportPreviewDraft, UndoSnapshot, ReviewSession, ReviewSnapshotSelection, ReviewDiff, InspectionTaskPackage } from '@/types';
 
 const STORAGE_KEY = 'warehouse_inspection_state';
 
@@ -32,6 +32,7 @@ export function loadPersistedState(): PersistedState {
       currentBatchId: parsed.currentBatchId ?? null,
       activeSessionId: parsed.activeSessionId ?? null,
       reviewState: parsed.reviewState ?? null,
+      inspectionState: parsed.inspectionState ?? null,
     };
   } catch {
     return { ...defaultState };
@@ -211,5 +212,74 @@ export function saveReviewDiff(diff: ReviewDiff | null): void {
 export function clearReviewState(): void {
   const state = loadPersistedState();
   state.reviewState = undefined;
+  savePersistedState(state);
+}
+
+export function saveInspectionSelectedSlotIds(selectedSlotIds: string[]): void {
+  const state = loadPersistedState();
+  state.inspectionState = {
+    ...state.inspectionState,
+    selectedSlotIds,
+    draft: state.inspectionState?.draft ?? null,
+    lastPublished: state.inspectionState?.lastPublished ?? null,
+    lastImportedPackageId: state.inspectionState?.lastImportedPackageId ?? null,
+  };
+  savePersistedState(state);
+}
+
+export function saveInspectionDraft(draft: InspectionTaskPackage | null): void {
+  const state = loadPersistedState();
+  state.inspectionState = {
+    ...state.inspectionState,
+    selectedSlotIds: state.inspectionState?.selectedSlotIds || [],
+    draft,
+    lastPublished: state.inspectionState?.lastPublished ?? null,
+    lastImportedPackageId: state.inspectionState?.lastImportedPackageId ?? null,
+  };
+  savePersistedState(state);
+}
+
+export function saveInspectionLastPublished(published: InspectionTaskPackage | null): void {
+  const state = loadPersistedState();
+  state.inspectionState = {
+    ...state.inspectionState,
+    selectedSlotIds: state.inspectionState?.selectedSlotIds || [],
+    draft: state.inspectionState?.draft ?? null,
+    lastPublished: published,
+    lastImportedPackageId: state.inspectionState?.lastImportedPackageId ?? null,
+  };
+  savePersistedState(state);
+}
+
+export function saveInspectionLastImportedPackageId(packageId: string | null): void {
+  const state = loadPersistedState();
+  state.inspectionState = {
+    ...state.inspectionState,
+    selectedSlotIds: state.inspectionState?.selectedSlotIds || [],
+    draft: state.inspectionState?.draft ?? null,
+    lastPublished: state.inspectionState?.lastPublished ?? null,
+    lastImportedPackageId: packageId,
+  };
+  savePersistedState(state);
+}
+
+export function loadInspectionState(): {
+  selectedSlotIds: string[];
+  draft: InspectionTaskPackage | null;
+  lastPublished: InspectionTaskPackage | null;
+  lastImportedPackageId: string | null;
+} {
+  const state = loadPersistedState();
+  return {
+    selectedSlotIds: state.inspectionState?.selectedSlotIds || [],
+    draft: state.inspectionState?.draft ?? null,
+    lastPublished: state.inspectionState?.lastPublished ?? null,
+    lastImportedPackageId: state.inspectionState?.lastImportedPackageId ?? null,
+  };
+}
+
+export function clearInspectionState(): void {
+  const state = loadPersistedState();
+  state.inspectionState = undefined;
   savePersistedState(state);
 }

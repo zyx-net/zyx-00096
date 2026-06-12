@@ -149,7 +149,15 @@ export type LogActionType =
   | 'export_review_csv'
   | 'import_review'
   | 'apply_review'
-  | 'undo_review';
+  | 'undo_review'
+  | 'create_inspection_draft'
+  | 'update_inspection_draft'
+  | 'publish_inspection'
+  | 'undo_publish_inspection'
+  | 'export_inspection_json'
+  | 'import_inspection'
+  | 'apply_inspection_import'
+  | 'clear_inspection_draft';
 
 export type ChangeType = 'added' | 'removed' | 'modified' | 'unchanged';
 
@@ -313,6 +321,71 @@ export interface RestoreConflict {
 
 export type RestoreMode = 'full' | 'view_only';
 
+export interface InspectionRoutePoint {
+  slotId: string;
+  shelfId: string;
+  row: number;
+  column: number;
+  level: number;
+  order: number;
+  estimatedDistance: number;
+}
+
+export interface InspectionTaskPackage {
+  id: string;
+  version: string;
+  name: string;
+  description?: string;
+  layoutName: string;
+  createdAt: string;
+  updatedAt: string;
+  status: 'draft' | 'published';
+  publishedAt?: string;
+  filterSnapshot: Filters;
+  selectedSlotIds: string[];
+  route: InspectionRoutePoint[];
+  totalDistance: number;
+  totalPoints: number;
+  metadata?: Record<string, unknown>;
+}
+
+export interface InspectionImportConflict {
+  type: 'id_duplicate' | 'layout_mismatch' | 'slot_missing' | 'version_incompatible';
+  severity: 'block' | 'warn' | 'info';
+  message: string;
+  details?: string[];
+}
+
+export interface InspectionImportPreview {
+  valid: boolean;
+  package: InspectionTaskPackage | null;
+  conflicts: InspectionImportConflict[];
+  validationErrors: string[];
+  isParseError: boolean;
+  canApply: boolean;
+  applyMode: 'overwrite' | 'view_only';
+}
+
+export interface InspectionUndoSnapshot {
+  packageId: string;
+  packageName: string;
+  previousDraft: InspectionTaskPackage | null;
+  previousPublished: InspectionTaskPackage | null;
+  previousSelectedSlotIds: string[];
+  previousFilters: Filters;
+  createdAt: string;
+}
+
+export interface InspectionState {
+  enabled: boolean;
+  selectedSlotIds: string[];
+  draft: InspectionTaskPackage | null;
+  lastPublished: InspectionTaskPackage | null;
+  importPreview: InspectionImportPreview | null;
+  undoSnapshot: InspectionUndoSnapshot | null;
+  lastImportedPackageId: string | null;
+}
+
 export interface PersistedState {
   filters: Filters;
   confirmedConflicts: string[];
@@ -329,5 +402,11 @@ export interface PersistedState {
     selectedSlotIds: string[];
     lastImportedPackageId: string | null;
     diff: ReviewDiff | null;
+  };
+  inspectionState?: {
+    selectedSlotIds: string[];
+    draft: InspectionTaskPackage | null;
+    lastPublished: InspectionTaskPackage | null;
+    lastImportedPackageId: string | null;
   };
 }
